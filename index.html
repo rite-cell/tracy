@@ -154,7 +154,45 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
   0%{transform:translate(0,0) rotate(0);opacity:1}
   100%{transform:translate(var(--x),var(--y)) rotate(var(--r));opacity:0}
 }
+/* pull to refresh */
+.ptr{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 6px);z-index:40;width:44px;height:44px;margin-left:-22px;border-radius:50%;background:var(--surface);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;transform:translateY(-70px);opacity:0;pointer-events:none}
+.ptr svg{width:22px;height:22px;color:var(--grape);transition:transform .15s}
+.ptr.ready svg{transform:rotate(180deg)}
+.ptr.loading svg{animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* greeting */
+.hello{position:fixed;inset:0;z-index:60;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:calc(20px + env(safe-area-inset-top,0px)) 24px calc(20px + env(safe-area-inset-bottom,0px));text-align:center;transition:opacity .35s}
+.hello[hidden]{display:none}
+.hello.out{opacity:0;pointer-events:none}
+.hello .vidwrap{position:relative;height:min(62vh,520px);aspect-ratio:2/3;border-radius:28px;overflow:hidden;box-shadow:0 0 0 4px var(--pink)}
+.hello video{width:100%;height:100%;object-fit:cover;display:block;background:#C9B8EA}
+.hello .snd{position:absolute;right:10px;bottom:10px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(34,22,79,.7);color:#fff;display:flex;align-items:center;justify-content:center}
+.hello .snd svg{width:22px;height:22px}
+.hello h3{margin:10px 0 0;font-size:34px;font-weight:800;letter-spacing:-0.03em;line-height:1.05}
+.hello p{margin:0;color:var(--muted);font-size:17px;max-width:30ch}
+.hello .go{margin-top:10px;border:0;border-radius:999px;padding:14px 34px;font-size:19px;font-weight:800;background:var(--pink);color:#fff}
+
+/* celebration */
+.party{position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:24px;text-align:center;background:color-mix(in srgb, var(--bg) 88%, transparent);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .2s}
+.party.show{opacity:1;pointer-events:auto}
+.party .buddywrap{position:relative;width:170px;height:255px}
+.party .buddy{display:block;width:100%;height:100%;object-fit:cover;border-radius:28px;border:4px solid var(--surface);box-shadow:0 0 0 4px var(--pink)}
+.party.show .buddywrap{animation:enter .55s cubic-bezier(.3,1.6,.5,1) both}
+.party.show .buddy{animation:hop .9s ease-in-out .55s infinite}
+.spark{position:absolute;width:18px;height:18px;background:var(--sun);clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);opacity:0}
+.s1{top:-10px;left:-14px}.s2{top:40%;right:-18px;background:var(--lime)}.s3{bottom:6px;left:-20px;background:var(--sky)}
+.party.show .spark{animation:twinkle 1.2s ease-in-out infinite}
+.party.show .s2{animation-delay:.4s}.party.show .s3{animation-delay:.8s}
+.party h3{margin:8px 0 0;font-size:34px;font-weight:800;letter-spacing:-0.03em;line-height:1.05;max-width:16ch}
+.party p{margin:4px 0 0;font-size:18px;color:var(--muted);max-width:28ch}
+.party button{margin-top:18px;border:0;border-radius:999px;padding:14px 28px;font-size:18px;font-weight:800;background:var(--lime);color:var(--onLime)}
+@keyframes hop{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-10px) rotate(2deg)}}
+@keyframes twinkle{0%,100%{opacity:0;transform:scale(.4) rotate(0)}50%{opacity:1;transform:scale(1.1) rotate(45deg)}}
+@keyframes enter{from{transform:translateY(80px) scale(.5);opacity:0}to{transform:none;opacity:1}}
+
 @media (prefers-reduced-motion: reduce){
+  .party.show .buddywrap,.party.show .buddy,.party.show .spark{animation:none}
   .confetti{display:none}
   .toast{transition:none}
 }
@@ -323,6 +361,32 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
   </div>
 </nav>
 
+<div class="ptr" id="ptr" aria-hidden="true">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v14M6 12l6 6 6-6"/></svg>
+</div>
+
+<div class="hello" id="hello" role="dialog" aria-modal="true" aria-labelledby="helloTitle" hidden>
+  <div class="vidwrap">
+    <video id="helloVid" src="hello.mp4" poster="hello-poster.jpg" playsinline muted preload="auto"></video>
+    <button type="button" class="snd" id="helloSnd" aria-label="Slå på ljud">
+      <svg id="sndIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>
+    </button>
+  </div>
+  <h3 id="helloTitle">Hej! Redo att köra?</h3>
+  <p id="helloSub"></p>
+  <button type="button" class="go" id="helloGo">Kör!</button>
+</div>
+
+<div class="party" id="party" role="dialog" aria-modal="true" aria-labelledby="partyTitle">
+  <div class="buddywrap">
+    <img class="buddy" src="tracy.jpg" alt="Tracy jublar" width="480" height="720">
+    <span class="spark s1" aria-hidden="true"></span><span class="spark s2" aria-hidden="true"></span><span class="spark s3" aria-hidden="true"></span>
+  </div>
+  <h3 id="partyTitle"></h3>
+  <p id="partyText"></p>
+  <button type="button" id="partyClose">Tack, Tracy!</button>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -426,6 +490,16 @@ function confetti(){
     document.body.appendChild(c); setTimeout(()=>c.remove(),1200);
   }
 }
+const LIFT_LINES=["Starkare än någonsin!","Kolla på dig!","Det där var tungt. Och du lyfte det.","Nytt rekord i boken!","Stången fick sig en överraskning."];
+const BODY_LINES=["Ny lägstanivå!","Det går åt rätt håll!","Fint jobbat!","Steg för steg, och det syns."];
+function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
+function celebrate(title, text){
+  $("partyTitle").textContent=title; $("partyText").textContent=text;
+  const p=$("party"); p.classList.add("show"); confetti();
+  clearTimeout(p._h); p._h=setTimeout(closeParty,6000);
+  setTimeout(()=>$("partyClose").focus(),50);
+}
+function closeParty(){ $("party").classList.remove("show"); }
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function bestRm(ex, excludeId){
   let b=0; state.sets.forEach(s=>{ if(s.ex===ex && s.id!==excludeId){ b=Math.max(b,est1rm(s.kg,s.reps)); } }); return b;
@@ -524,11 +598,14 @@ function addSet(){
   const date=$("logDate").value||todayStr();
   const prevBest=bestRm(currentEx);
   const isPr = prevBest>0 && est1rm(kg,reps)>prevBest+0.01;
-  const s={id:uid(),date,ex:currentEx,reps,kg,pr:isPr};
+  const prevMaxKg=state.sets.filter(x=>x.ex===currentEx).reduce((m,x)=>Math.max(m,x.kg),0);
+  const heavier = prevMaxKg>0 && kg>prevMaxKg;
+  const s={id:uid(),date,ex:currentEx,reps,kg,pr:isPr||heavier};
   state.sets.push(s);
   state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   save(); renderSession(); renderProg(); renderWeek();
-  if(isPr){ toast("Nytt personbästa i "+currentEx.toLowerCase()+"!"); confetti(); }
+  if(heavier){ celebrate(pick(LIFT_LINES), "Tyngsta "+currentEx.toLowerCase()+" hittills: "+fmt(kg)+" kg. Det är "+fmt(kg-prevMaxKg)+" kg mer än ditt förra rekord."); }
+  else if(isPr){ toast("Nytt personbästa i "+currentEx.toLowerCase()+"!"); confetti(); }
   else toast("Set sparat");
 }
 
@@ -664,8 +741,11 @@ function addBw(){
   const kg=num($("bw").value); const date=$("bwDate").value||todayStr();
   if(!(kg>20 && kg<400)){ toast("Skriv vikten i kilo, t.ex. 80,4"); return; }
   state.weights=state.weights.filter(x=>x.date!==date);
+  const prevMin=state.weights.length ? Math.min(...state.weights.map(x=>x.kg)) : 0;
   state.weights.push({date,kg});
-  $("bw").value=""; save(); renderBw(); toast("Vikt sparad");
+  $("bw").value=""; save(); renderBw();
+  if(prevMin>0 && kg<prevMin){ celebrate(pick(BODY_LINES), "Din lägsta vikt hittills: "+fmt(kg)+" kg. Det är "+fmt(prevMin-kg)+" kg mindre än förra lägstanivån."); }
+  else toast("Vikt sparad");
 }
 
 /* ---------- charts ---------- */
@@ -791,6 +871,61 @@ document.querySelectorAll("#metric button").forEach(b=> b.onclick=()=>{
   metric=b.dataset.m; document.querySelectorAll("#metric button").forEach(x=>x.setAttribute("aria-pressed", x===b)); renderProg();
 });
 $("addSet").onclick=addSet;
+$("partyClose").onclick=closeParty;
+$("party").addEventListener("click",e=>{ if(e.target.id==="party") closeParty(); });
+document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeParty(); });
+
+/* greeting on launch */
+function showHello(){
+  const KEY="tracy-hello-at", GAP=30*60*1000;
+  let last=0; try{ last=Number(localStorage.getItem(KEY))||0; }catch(e){}
+  if(Date.now()-last < GAP) return;
+  try{ localStorage.setItem(KEY, String(Date.now())); }catch(e){}
+  const el=$("hello"), v=$("helloVid");
+  const next=upcoming()[0];
+  $("helloSub").textContent = next ? "Nästa pass: "+dayLabel(planTime(next)).toLowerCase()+" "+next.time+", "+next.type.toLowerCase()+"." : "Inget pass planerat än. Lägg in ett under Schema.";
+  el.hidden=false;
+  const close=()=>{ el.classList.add("out"); v.pause(); setTimeout(()=>{ el.hidden=true; },400); };
+  $("helloGo").onclick=close;
+  v.addEventListener("ended", ()=>setTimeout(close,600));
+  const ON='<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>';
+  const OFF='<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/>';
+  $("helloSnd").onclick=()=>{
+    v.muted=!v.muted; $("sndIcon").innerHTML=v.muted?OFF:ON;
+    $("helloSnd").setAttribute("aria-label", v.muted?"Slå på ljud":"Stäng av ljud");
+    if(!v.muted && v.ended){ v.currentTime=0; } v.play().catch(()=>{});
+  };
+  const reduce=window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!reduce){ v.play().catch(()=>{}); }
+  setTimeout(()=>$("helloGo").focus(),100);
+}
+
+/* pull to refresh */
+(function(){
+  const ind=$("ptr"); const LIMIT=80; let startY=null, dist=0;
+  window.addEventListener("touchstart",e=>{
+    if(window.scrollY<=0 && !$("party").classList.contains("show") && e.touches.length===1){ startY=e.touches[0].clientY; dist=0; }
+    else startY=null;
+  },{passive:true});
+  window.addEventListener("touchmove",e=>{
+    if(startY===null) return;
+    dist=Math.max(0,e.touches[0].clientY-startY);
+    if(window.scrollY>0){ startY=null; dist=0; }
+    const pull=Math.min(dist*0.5,LIMIT+20);
+    ind.style.transform="translateY("+(pull-70)+"px)";
+    ind.style.opacity=Math.min(1,pull/40);
+    ind.classList.toggle("ready", dist*0.5>=LIMIT);
+  },{passive:true});
+  window.addEventListener("touchend",()=>{
+    if(startY===null) return;
+    if(dist*0.5>=LIMIT){
+      ind.classList.remove("ready"); ind.classList.add("loading");
+      ind.style.transform="translateY(10px)";
+      save(); setTimeout(()=>location.reload(),350);
+    }else{ ind.style.transform="translateY(-70px)"; ind.style.opacity=0; }
+    startY=null; dist=0;
+  });
+})();
 $("addBw").onclick=addBw;
 $("bw").addEventListener("keydown",e=>{ if(e.key==="Enter") addBw(); });
 $("addEx").onclick=addEx;
@@ -807,7 +942,7 @@ $("addPlan").onclick=addPlan;
 setInterval(()=>{ renderNext(); if($("v-plan").classList.contains("on")) renderPlan(); }, 60000);
 
 $("logDate").value=todayStr(); $("bwDate").value=todayStr(); $("planDate").value=todayStr();
-loadLocal(); renderAll(); connect();
+loadLocal(); renderAll(); connect(); showHello();
 })();
 </script>
 </body>
