@@ -132,6 +132,8 @@ input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(
 .day{aspect-ratio:1;border:2px solid var(--line);background:var(--surface);border-radius:14px;font-weight:800}
 .day[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff}
 .exman li{display:flex;justify-content:space-between;align-items:center}
+.plan-when{font-weight:800}
+.plan-type{display:block;font-size:14px;color:var(--muted)}
 .small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
 
 nav.tabs{
@@ -265,15 +267,18 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
 
   <!-- SCHEMA -->
   <section class="view" id="v-plan" aria-label="Schema">
-    <h2 style="margin-top:4px">Mina träningsdagar</h2>
+    <h2 style="margin-top:4px">Planera pass</h2>
     <div class="card">
-      <div class="days" id="days"></div>
-      <div class="row" style="margin-top:14px;align-items:center">
-        <label for="time" class="field" style="color:var(--muted)">Tid för passet</label>
-        <input type="time" id="time" class="plain" style="width:auto">
+      <div class="row">
+        <div class="field"><label for="planDate">Datum</label><input type="date" id="planDate" class="plain"></div>
+        <div class="field"><label for="planTime">Tid</label><input type="time" id="planTime" class="plain" value="18:00"></div>
       </div>
+      <div class="field" style="margin-top:10px"><label for="planType">Typ av pass</label><select id="planType" class="plain"></select></div>
+      <button class="big" id="addPlan" style="background:var(--grape)">Lägg till pass</button>
     </div>
-    <p class="hint">Nästa pass visas överst under Logga. Vill du få en notis kan du lägga in en återkommande påminnelse i appen Påminnelser på telefonen.</p>
+    <h2>Kommande pass</h2>
+    <div class="card"><ul class="wlist" id="planList"></ul></div>
+    <p class="hint">Det närmaste passet visas överst under Logga. Vill du få en notis kan du lägga in en påminnelse i appen Påminnelser på telefonen.</p>
 
     <h2>Passtyper</h2>
     <div class="card">
@@ -333,6 +338,7 @@ let state = {
   exercises:["Knäböj","Bänkpress","Marklyft","Militärpress","Rodd"],
   sets:[], weights:[],
   activityTypes:["Yoga","Flexcore"], activities:[],
+  planned:[],
   schedule:{days:[1,3,5], time:"18:00"}
 };
 let currentEx = state.exercises[0];
@@ -363,6 +369,7 @@ function merge(s){
   if(!Array.isArray(state.weights)) state.weights=[];
   if(!Array.isArray(state.activityTypes) || !state.activityTypes.length) state.activityTypes=["Yoga","Flexcore"];
   if(!Array.isArray(state.activities)) state.activities=[];
+  if(!Array.isArray(state.planned)) state.planned=[];
   if(!state.activityTypes.includes(currentAct)) currentAct=state.activityTypes[0];
   if(!state.schedule) state.schedule={days:[],time:"18:00"};
   if(!state.exercises.includes(currentEx)) currentEx=state.exercises[0];
@@ -425,27 +432,28 @@ function bestRm(ex, excludeId){
 }
 
 /* ---------- next session ---------- */
+function planTime(p){ const [y,m,d]=p.date.split("-").map(Number); const [hh,mm]=(p.time||"00:00").split(":").map(Number); return new Date(y,m-1,d,hh,mm); }
+function upcoming(){ const now=new Date(); return state.planned.filter(p=>planTime(p)>now).sort((a,b)=>planTime(a)-planTime(b)); }
+function dayLabel(t){
+  const now=new Date();
+  const diff=Math.round((new Date(t.getFullYear(),t.getMonth(),t.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+  if(diff===0) return "Idag";
+  if(diff===1) return "I morgon";
+  return DAYS_LONG[t.getDay()].replace(/^./,c=>c.toUpperCase())+" "+t.getDate()+"/"+(t.getMonth()+1);
+}
 function renderNext(){
-  const el=$("next"); const sch=state.schedule;
-  if(!sch.days || !sch.days.length){
-    el.innerHTML='<small>Nästa pass</small><div class="when">Inte planerat</div><div class="sub">Välj dina träningsdagar så håller jag koll.</div><button type="button" data-go="v-plan">Välj dagar</button>';
+  const el=$("next"); const list=upcoming();
+  if(!list.length){
+    el.innerHTML='<small>Nästa pass</small><div class="when">Inget planerat</div><div class="sub">Lägg in ditt nästa pass så håller jag koll.</div><button type="button" data-go="v-plan">Planera pass</button>';
     return;
   }
-  const [hh,mm]=(sch.time||"18:00").split(":").map(Number);
-  const now=new Date(); let target=null;
-  for(let i=0;i<8;i++){
-    const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i,hh,mm);
-    if(sch.days.includes(d.getDay()) && d>now){ target=d; break; }
-  }
-  if(!target){ el.innerHTML='<small>Nästa pass</small><div class="when">–</div>'; return; }
-  const diffDays=Math.round((new Date(target.getFullYear(),target.getMonth(),target.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
-  const label = diffDays===0 ? "Idag" : diffDays===1 ? "I morgon" : DAYS_LONG[target.getDay()].replace(/^./,c=>c.toUpperCase());
-  const hoursLeft=(target-now)/36e5;
-  const sub = hoursLeft<1 ? "Om mindre än en timme. Dags att packa väskan!" :
-              hoursLeft<24 ? "Om "+Math.round(hoursLeft)+" timmar" : "Om "+diffDays+" dagar";
+  const p=list[0]; const t=planTime(p); const now=new Date();
+  const hours=(t-now)/36e5;
+  const days=Math.round((new Date(t.getFullYear(),t.getMonth(),t.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+  const left = hours<1 ? "om mindre än en timme" : hours<24 ? "om "+Math.round(hours)+" timmar" : "om "+days+" dagar";
   el.innerHTML='<small>Nästa pass</small><div class="when"></div><div class="sub"></div>';
-  el.querySelector(".when").textContent=label+" "+pad(hh)+":"+pad(mm);
-  el.querySelector(".sub").textContent=sub;
+  el.querySelector(".when").textContent=dayLabel(t)+" "+p.time;
+  el.querySelector(".sub").textContent=p.type+", "+left;
 }
 
 /* ---------- log ---------- */
@@ -692,17 +700,22 @@ function drawLine(which, labels, series, emptyMsg){
 
 /* ---------- plan ---------- */
 function renderPlan(){
-  const box=$("days"); box.innerHTML="";
-  DAY_ORDER.forEach(d=>{
-    const b=document.createElement("button"); b.type="button"; b.className="day"; b.textContent=DAYS[d].slice(0,1);
-    b.setAttribute("aria-label",DAYS_LONG[d]); b.setAttribute("aria-pressed", state.schedule.days.includes(d));
-    b.onclick=()=>{
-      const set=new Set(state.schedule.days); set.has(d)?set.delete(d):set.add(d);
-      state.schedule.days=[...set]; save(); renderPlan(); renderNext();
-    };
-    box.appendChild(b);
+  const sel=$("planType"); const prev=sel.value; sel.innerHTML="";
+  ["Styrka",...state.activityTypes].forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); });
+  if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
+  const pl=$("planList"); pl.innerHTML="";
+  const list=upcoming();
+  if(!list.length){ pl.innerHTML='<li class="empty" style="justify-content:center">Inga planerade pass.</li>'; }
+  list.forEach(p=>{
+    const li=document.createElement("li");
+    const s=document.createElement("span");
+    const w=document.createElement("span"); w.className="plan-when"; w.textContent=dayLabel(planTime(p))+" "+p.time;
+    const ty=document.createElement("span"); ty.className="plan-type"; ty.textContent=p.type;
+    s.appendChild(w); s.appendChild(ty);
+    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort passet "+w.textContent);
+    del.onclick=()=>{ state.planned=state.planned.filter(x=>x.id!==p.id); save(); renderPlan(); renderNext(); toast("Pass borttaget"); };
+    li.appendChild(s); li.appendChild(del); pl.appendChild(li);
   });
-  $("time").value=state.schedule.time||"18:00";
   const al=$("actList"); al.innerHTML="";
   state.activityTypes.forEach(t=>{
     const li=document.createElement("li");
@@ -740,6 +753,15 @@ function addEx(){
   state.exercises.push(name); currentEx=name; $("newEx").value=""; save(); renderAll(); toast(name+" tillagd");
 }
 
+function addPlan(){
+  const date=$("planDate").value, time=$("planTime").value, type=$("planType").value;
+  if(!date){ toast("Välj ett datum"); return; }
+  if(!time){ toast("Välj en tid"); return; }
+  const p={id:uid(),date,time,type};
+  if(planTime(p)<=new Date()){ toast("Välj en tid som inte har passerat"); return; }
+  state.planned.push(p); save(); renderPlan(); renderNext();
+  toast(type+" planerat "+dayLabel(planTime(p)).toLowerCase()+" "+time);
+}
 function addActType(){
   const name=$("newAct").value.trim();
   if(!name){ toast("Skriv ett namn på passtypen"); return; }
@@ -781,10 +803,10 @@ $("newAct").addEventListener("keydown",e=>{ if(e.key==="Enter") addActType(); })
 document.querySelectorAll("#mode button").forEach(b=> b.onclick=()=>setMode(b.dataset.mode));
 $("newEx").addEventListener("keydown",e=>{ if(e.key==="Enter") addEx(); });
 $("logDate").addEventListener("change",renderSession);
-$("time").addEventListener("change",e=>{ state.schedule.time=e.target.value||"18:00"; save(); renderNext(); });
-setInterval(renderNext, 60000);
+$("addPlan").onclick=addPlan;
+setInterval(()=>{ renderNext(); if($("v-plan").classList.contains("on")) renderPlan(); }, 60000);
 
-$("logDate").value=todayStr(); $("bwDate").value=todayStr();
+$("logDate").value=todayStr(); $("bwDate").value=todayStr(); $("planDate").value=todayStr();
 loadLocal(); renderAll(); connect();
 })();
 </script>
