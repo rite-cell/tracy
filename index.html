@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Tracy">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#F5F1FF">
+<meta name="description" content="Tracy, min träningslogg.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<title>Tracy</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  color-scheme: light;
+  --bg:#F5F1FF; --surface:#FFFFFF; --ink:#22164F; --muted:#6B6292;
+  --grape:#5B34E0; --pink:#FF4F9A; --lime:#C4F03A; --sky:#4DC3FF; --sun:#FFC433;
+  --line:#E3DCFA; --onGrape:#FFFFFF; --onLime:#22164F;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#170F33; --surface:#231A4A; --ink:#F3EEFF; --muted:#A79FCC;
+    --grape:#8B6BFF; --line:#3A2F6B; --onGrape:#FFFFFF;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#170F33; --surface:#231A4A; --ink:#F3EEFF; --muted:#A79FCC;
+  --grape:#8B6BFF; --line:#3A2F6B; --onGrape:#FFFFFF;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:"Bricolage Grotesque", ui-rounded, "SF Pro Rounded", system-ui, -apple-system, sans-serif;
+  font-size:17px; line-height:1.4; -webkit-font-smoothing:antialiased;
+}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+.wrap{max-width:560px;margin:0 auto;padding:16px 18px 120px}
+header.top{display:flex;align-items:baseline;justify-content:space-between;padding:6px 2px 14px}
+.logo{font-weight:800;font-size:34px;letter-spacing:-0.03em;line-height:1}
+.logo span{display:inline-block;transform:rotate(-8deg);color:var(--pink)}
+.sync{font-size:13px;color:var(--muted)}
+h2{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:26px 0 10px}
+.view{display:none}
+.view.on{display:block}
+
+/* Next session sticker: the one bold element */
+.sticker{
+  position:relative; background:var(--grape); color:var(--onGrape);
+  border-radius:28px; padding:20px 22px 22px; overflow:hidden;
+}
+.sticker::after{
+  content:""; position:absolute; right:-40px; top:-40px; width:150px; height:150px;
+  border-radius:50%; background:var(--pink); opacity:.9;
+}
+.sticker::before{
+  content:""; position:absolute; right:60px; bottom:-50px; width:90px; height:90px;
+  border-radius:50%; background:var(--sun);
+}
+.sticker small{position:relative;z-index:1;font-size:15px;opacity:.85}
+.sticker .when{position:relative;z-index:1;font-size:44px;font-weight:800;letter-spacing:-0.03em;line-height:1.05;margin:4px 0 2px}
+.sticker .sub{position:relative;z-index:1;font-size:15px;opacity:.9}
+.sticker button{position:relative;z-index:1;margin-top:12px;background:var(--lime);color:var(--onLime);border:0;border-radius:999px;padding:8px 16px;font-weight:600}
+
+.card{background:var(--surface);border:2px solid var(--line);border-radius:20px;padding:16px}
+.chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip.add{border-style:dashed;color:var(--muted)}
+.hint{font-size:14px;color:var(--muted);margin:6px 2px 12px}
+.row{display:flex;gap:10px;align-items:stretch}
+.field{flex:1;min-width:0}
+.field label{display:block;font-size:14px;color:var(--muted);margin:0 0 4px 4px}
+.stepper{display:flex;align-items:center;background:var(--bg);border-radius:16px;padding:4px}
+.stepper button{width:44px;height:44px;border:0;border-radius:12px;background:var(--surface);font-size:22px;font-weight:600;flex:none}
+.stepper input{width:100%;min-width:0;border:0;background:transparent;text-align:center;font-size:26px;font-weight:800;padding:0}
+.stepper input:focus{outline:none}
+.big{width:100%;margin-top:14px;border:0;border-radius:18px;padding:16px;font-size:19px;font-weight:800;background:var(--pink);color:#fff}
+.big:active{transform:scale(.98)}
+input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 12px}
+.dateline{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 12px}
+.dateline input{width:auto}
+
+.sess{margin-top:10px}
+.exgroup{padding:12px 0;border-top:2px solid var(--line)}
+.exgroup:first-child{border-top:0}
+.exgroup h3{margin:0 0 6px;font-size:18px}
+.setlist{display:flex;flex-wrap:wrap;gap:6px}
+.set{display:inline-flex;align-items:center;gap:6px;background:var(--bg);border-radius:12px;padding:6px 6px 6px 10px;font-weight:600;font-size:15px}
+.set.pr{background:var(--lime);color:var(--onLime)}
+.set button{border:0;background:transparent;width:26px;height:26px;border-radius:8px;color:inherit;opacity:.6;font-size:16px}
+.empty{color:var(--muted);text-align:center;padding:18px 8px}
+
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0}
+.stat{border-radius:16px;padding:12px;color:var(--onLime)}
+.stat:nth-child(1){background:var(--sky)}
+.stat:nth-child(2){background:var(--sun)}
+.stat:nth-child(3){background:var(--lime)}
+.stat b{display:block;font-size:24px;font-weight:800;letter-spacing:-0.02em;line-height:1.1}
+.stat span{font-size:13px}
+.seg{display:flex;background:var(--surface);border:2px solid var(--line);border-radius:14px;padding:3px;gap:3px;margin-bottom:10px}
+.seg button{flex:1;border:0;background:transparent;border-radius:10px;padding:8px 4px;font-weight:600;font-size:14px}
+.seg button[aria-pressed="true"]{background:var(--grape);color:var(--onGrape)}
+.chartbox{position:relative;height:250px}
+.chartbox.short{height:200px}
+.actitem{display:inline-flex;align-items:center;gap:6px;background:var(--sky);color:var(--onLime);border-radius:12px;padding:6px 6px 6px 10px;font-weight:600;font-size:15px}
+.actitem button{border:0;background:transparent;width:26px;height:26px;border-radius:8px;color:inherit;opacity:.6;font-size:16px}
+.legend{display:flex;gap:14px;font-size:14px;color:var(--muted);margin:0 2px 8px}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:4px;margin-right:6px;vertical-align:-1px}
+
+.wlist{margin:0;padding:0;list-style:none}
+.wlist li{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:2px solid var(--line)}
+.wlist li:first-child{border-top:0}
+.wlist button{border:0;background:transparent;color:var(--muted);font-size:16px;width:32px;height:32px}
+
+.days{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+.day{aspect-ratio:1;border:2px solid var(--line);background:var(--surface);border-radius:14px;font-weight:800}
+.day[aria-pressed="true"]{background:var(--pink);border-color:var(--pink);color:#fff}
+.exman li{display:flex;justify-content:space-between;align-items:center}
+.small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
+
+nav.tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:20;
+  background:var(--surface);border-top:2px solid var(--line);
+  padding:8px 10px calc(8px + env(safe-area-inset-bottom,0px));
+  display:flex;justify-content:center;
+}
+nav.tabs .in{display:flex;gap:6px;max-width:560px;width:100%}
+nav.tabs button{flex:1;border:0;background:transparent;border-radius:14px;padding:8px 4px;font-weight:600;font-size:14px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button svg{width:24px;height:24px}
+nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
+
+.toast{position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:999px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s, transform .2s;z-index:30;white-space:nowrap}
+.toast.show{opacity:1;transform:translate(-50%,0)}
+.confetti{position:fixed;top:40%;left:50%;width:10px;height:14px;border-radius:3px;z-index:31;pointer-events:none;animation:pop 1.1s ease-out forwards}
+@keyframes pop{
+  0%{transform:translate(0,0) rotate(0);opacity:1}
+  100%{transform:translate(var(--x),var(--y)) rotate(var(--r));opacity:0}
+}
+@media (prefers-reduced-motion: reduce){
+  .confetti{display:none}
+  .toast{transition:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">Tracy<span>!</span></div>
+    <div class="sync" id="sync"></div>
+  </header>
+
+  <!-- LOGGA -->
+  <section class="view on" id="v-log" aria-label="Logga">
+    <div class="sticker" id="next"></div>
+
+    <h2>Logga</h2>
+    <div class="seg" id="mode" role="group" aria-label="Typ av pass">
+      <button aria-pressed="true" data-mode="str">Styrka</button>
+      <button aria-pressed="false" data-mode="act">Annat pass</button>
+    </div>
+    <div class="card">
+      <div class="dateline">
+        <label for="logDate" class="hint" style="margin:0">Datum</label>
+        <input type="date" id="logDate" class="plain">
+      </div>
+      <div id="strBox">
+      <div class="chips" id="exChips" role="group" aria-label="Välj övning"></div>
+      <p class="hint" id="lastHint"></p>
+      <div class="row">
+        <div class="field">
+          <label for="reps">Reps</label>
+          <div class="stepper">
+            <button type="button" data-step="reps" data-d="-1" aria-label="Minska reps">−</button>
+            <input id="reps" inputmode="numeric" value="5" aria-label="Reps">
+            <button type="button" data-step="reps" data-d="1" aria-label="Öka reps">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="kg">Vikt (kg)</label>
+          <div class="stepper">
+            <button type="button" data-step="kg" data-d="-2.5" aria-label="Minska vikt">−</button>
+            <input id="kg" inputmode="decimal" value="20" aria-label="Vikt i kilo">
+            <button type="button" data-step="kg" data-d="2.5" aria-label="Öka vikt">+</button>
+          </div>
+        </div>
+      </div>
+      <button class="big" id="addSet">Lägg till set</button>
+      </div>
+      <div id="actBox" hidden>
+        <div class="chips" id="actChips" role="group" aria-label="Välj typ av pass"></div>
+        <div class="field" style="margin-top:8px">
+          <label for="mins">Hur länge (minuter)</label>
+          <div class="stepper">
+            <button type="button" data-step="mins" data-d="-5" aria-label="Minska minuter">−</button>
+            <input id="mins" inputmode="numeric" value="45" aria-label="Minuter">
+            <button type="button" data-step="mins" data-d="5" aria-label="Öka minuter">+</button>
+          </div>
+        </div>
+        <button class="big" id="addAct" style="background:var(--sky);color:var(--onLime)">Spara pass</button>
+      </div>
+    </div>
+
+    <h2 id="sessTitle">Dagens pass</h2>
+    <div class="card"><div class="sess" id="sess"></div></div>
+  </section>
+
+  <!-- FRAMSTEG -->
+  <section class="view" id="v-prog" aria-label="Framsteg">
+    <h2 style="margin-top:4px">Framsteg</h2>
+    <div class="stats" id="weekStats"></div>
+    <div class="card">
+      <div class="legend"><span><i style="background:var(--pink)"></i>Styrka</span><span><i style="background:var(--sky)"></i>Andra pass</span></div>
+      <div class="chartbox short"><canvas id="weekChart" aria-label="Antal pass per vecka"></canvas></div>
+    </div>
+    <h2>Per övning</h2>
+    <div class="chips" id="progChips" role="group" aria-label="Välj övning"></div>
+    <div class="seg" id="metric" role="group" aria-label="Vad ska visas">
+      <button aria-pressed="true" data-m="kg">Tyngsta set</button>
+      <button aria-pressed="false" data-m="rm">Beräknat max</button>
+      <button aria-pressed="false" data-m="vol">Volym</button>
+    </div>
+    <div class="stats" id="progStats"></div>
+    <div class="card"><div class="chartbox"><canvas id="progChart" aria-label="Diagram över progression"></canvas></div></div>
+    <p class="hint">Beräknat max är en uppskattning av hur mycket du skulle klara en gång: vikt × (1 + reps/30). Volym är reps × vikt för alla set under passet.</p>
+  </section>
+
+  <!-- KROPPSVIKT -->
+  <section class="view" id="v-body" aria-label="Kroppsvikt">
+    <h2 style="margin-top:4px">Kroppsvikt</h2>
+    <div class="card">
+      <div class="row">
+        <div class="field">
+          <label for="bwDate">Datum</label>
+          <input type="date" id="bwDate" class="plain">
+        </div>
+        <div class="field">
+          <label for="bw">Vikt (kg)</label>
+          <input id="bw" class="plain" inputmode="decimal" placeholder="t.ex. 80,4">
+        </div>
+      </div>
+      <button class="big" id="addBw" style="background:var(--grape)">Spara vikt</button>
+    </div>
+    <div class="stats" id="bwStats"></div>
+    <div class="card"><div class="chartbox"><canvas id="bwChart" aria-label="Diagram över kroppsvikt"></canvas></div></div>
+    <p class="hint">Den tjocka linjen är snittet av dina sju senaste vägningar. Den jämnar ut variationen mellan dagarna.</p>
+    <h2>Vägningar</h2>
+    <div class="card"><ul class="wlist" id="bwList"></ul></div>
+  </section>
+
+  <!-- SCHEMA -->
+  <section class="view" id="v-plan" aria-label="Schema">
+    <h2 style="margin-top:4px">Mina träningsdagar</h2>
+    <div class="card">
+      <div class="days" id="days"></div>
+      <div class="row" style="margin-top:14px;align-items:center">
+        <label for="time" class="field" style="color:var(--muted)">Tid för passet</label>
+        <input type="time" id="time" class="plain" style="width:auto">
+      </div>
+    </div>
+    <p class="hint">Nästa pass visas överst under Logga. Vill du få en notis kan du lägga in en återkommande påminnelse i appen Påminnelser på telefonen.</p>
+
+    <h2>Passtyper</h2>
+    <div class="card">
+      <ul class="wlist exman" id="actList"></ul>
+      <div class="row" style="margin-top:10px">
+        <input id="newAct" class="plain" placeholder="Ny passtyp, t.ex. Pilates">
+        <button class="small-btn" id="addActType">Lägg till</button>
+      </div>
+    </div>
+
+    <h2>Övningar</h2>
+    <div class="card">
+      <ul class="wlist exman" id="exList"></ul>
+      <div class="row" style="margin-top:10px">
+        <input id="newEx" class="plain" placeholder="Ny övning, t.ex. Chins">
+        <button class="small-btn" id="addEx">Lägg till</button>
+      </div>
+    </div>
+
+    <h2>Säkerhetskopia</h2>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Din data sparas bara på den här enheten. Spara en kopia då och då, till exempel i Filer eller iCloud Drive. Du kan också använda den för att flytta datan till en annan telefon.</p>
+      <div class="row">
+        <button class="small-btn" id="exportBtn" style="flex:1">Spara kopia</button>
+        <button class="small-btn" id="importBtn" style="flex:1">Läs in kopia</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+    </div>
+  </section>
+</div>
+
+<nav class="tabs" aria-label="Huvudmeny">
+  <div class="in">
+    <button data-v="v-log" aria-current="page">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 9v6M6 6v12M18 6v12M21 9v6M6 12h12"/></svg>Logga</button>
+    <button data-v="v-prog">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8"/><path d="M15 7h6v6"/></svg>Framsteg</button>
+    <button data-v="v-body">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="5"/><path d="M9 10a3 3 0 0 1 6 0M12 10l1.5-2"/></svg>Vikt</button>
+    <button data-v="v-plan">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="4"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>Schema</button>
+  </div>
+</nav>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+const LS_KEY = "lyft-state-v1";
+const DAYS = ["Sön","Mån","Tis","Ons","Tor","Fre","Lör"];
+const DAYS_LONG = ["söndag","måndag","tisdag","onsdag","torsdag","fredag","lördag"];
+const DAY_ORDER = [1,2,3,4,5,6,0];
+
+let state = {
+  v:1,
+  exercises:["Knäböj","Bänkpress","Marklyft","Militärpress","Rodd"],
+  sets:[], weights:[],
+  activityTypes:["Yoga","Flexcore"], activities:[],
+  schedule:{days:[1,3,5], time:"18:00"}
+};
+let currentEx = state.exercises[0];
+let progEx = state.exercises[0];
+let metric = "kg";
+let db = null, docRef = null, saveTimer = null;
+let progChart = null, bwChart = null, weekChart = null;
+let currentAct = "Yoga";
+
+const $ = id => document.getElementById(id);
+const pad = n => String(n).padStart(2,"0");
+const todayStr = () => { const d=new Date(); return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); };
+const num = s => { const n = parseFloat(String(s).replace(",", ".")); return isFinite(n) ? n : NaN; };
+const fmt = n => (Math.round(n*10)/10).toLocaleString("sv-SE");
+const est1rm = (kg,reps) => kg*(1+reps/30);
+const shortDate = s => { const [y,m,d]=s.split("-"); return Number(d)+"/"+Number(m); };
+const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+
+/* ---------- storage ---------- */
+function loadLocal(){
+  try{ const raw = localStorage.getItem(LS_KEY); if(raw){ merge(JSON.parse(raw)); } }catch(e){}
+}
+function merge(s){
+  if(!s || typeof s!=="object") return;
+  state = Object.assign({}, state, s);
+  if(!Array.isArray(state.exercises) || !state.exercises.length) state.exercises=["Knäböj"];
+  if(!Array.isArray(state.sets)) state.sets=[];
+  if(!Array.isArray(state.weights)) state.weights=[];
+  if(!Array.isArray(state.activityTypes) || !state.activityTypes.length) state.activityTypes=["Yoga","Flexcore"];
+  if(!Array.isArray(state.activities)) state.activities=[];
+  if(!state.activityTypes.includes(currentAct)) currentAct=state.activityTypes[0];
+  if(!state.schedule) state.schedule={days:[],time:"18:00"};
+  if(!state.exercises.includes(currentEx)) currentEx=state.exercises[0];
+  if(!state.exercises.includes(progEx)) progEx=state.exercises[0];
+}
+function save(){
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+  if(!docRef) return;
+  clearTimeout(saveTimer);
+  $("sync").textContent = "Sparar…";
+  saveTimer = setTimeout(async ()=>{
+    try{ await docRef.set(JSON.parse(JSON.stringify(state))); $("sync").textContent = "Sparat"; }
+    catch(e){ $("sync").textContent = "Sparat på den här enheten"; }
+  }, 700);
+}
+async function connect(){
+  $("sync").textContent = "Sparas på den här enheten";
+  try{ if(navigator.storage && navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
+}
+function exportData(){
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download="tracy-kopia-"+todayStr()+".json"; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+  toast("Kopia sparad");
+}
+function importData(file){
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const s=JSON.parse(r.result);
+      if(!s || !Array.isArray(s.sets)) throw new Error("fel format");
+      if(!confirm("Läsa in kopian? Det du har loggat på den här enheten ersätts.")) return;
+      merge(s); save(); renderAll(); toast("Kopian är inläst");
+    }catch(e){ toast("Filen kunde inte läsas. Välj en kopia från Tracy."); }
+  };
+  r.readAsText(file);
+}
+
+/* ---------- helpers ---------- */
+function toast(msg){
+  const t=$("toast"); t.textContent=msg; t.classList.add("show");
+  clearTimeout(t._h); t._h=setTimeout(()=>t.classList.remove("show"),2200);
+}
+function confetti(){
+  const cols=["var(--pink)","var(--lime)","var(--sky)","var(--sun)","var(--grape)"];
+  for(let i=0;i<26;i++){
+    const c=document.createElement("div"); c.className="confetti";
+    const a=Math.random()*Math.PI*2, r=120+Math.random()*160;
+    c.style.setProperty("--x",Math.cos(a)*r+"px");
+    c.style.setProperty("--y",(Math.sin(a)*r-60)+"px");
+    c.style.setProperty("--r",(Math.random()*720-360)+"deg");
+    c.style.background=cols[i%cols.length];
+    document.body.appendChild(c); setTimeout(()=>c.remove(),1200);
+  }
+}
+function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function bestRm(ex, excludeId){
+  let b=0; state.sets.forEach(s=>{ if(s.ex===ex && s.id!==excludeId){ b=Math.max(b,est1rm(s.kg,s.reps)); } }); return b;
+}
+
+/* ---------- next session ---------- */
+function renderNext(){
+  const el=$("next"); const sch=state.schedule;
+  if(!sch.days || !sch.days.length){
+    el.innerHTML='<small>Nästa pass</small><div class="when">Inte planerat</div><div class="sub">Välj dina träningsdagar så håller jag koll.</div><button type="button" data-go="v-plan">Välj dagar</button>';
+    return;
+  }
+  const [hh,mm]=(sch.time||"18:00").split(":").map(Number);
+  const now=new Date(); let target=null;
+  for(let i=0;i<8;i++){
+    const d=new Date(now.getFullYear(),now.getMonth(),now.getDate()+i,hh,mm);
+    if(sch.days.includes(d.getDay()) && d>now){ target=d; break; }
+  }
+  if(!target){ el.innerHTML='<small>Nästa pass</small><div class="when">–</div>'; return; }
+  const diffDays=Math.round((new Date(target.getFullYear(),target.getMonth(),target.getDate()) - new Date(now.getFullYear(),now.getMonth(),now.getDate()))/864e5);
+  const label = diffDays===0 ? "Idag" : diffDays===1 ? "I morgon" : DAYS_LONG[target.getDay()].replace(/^./,c=>c.toUpperCase());
+  const hoursLeft=(target-now)/36e5;
+  const sub = hoursLeft<1 ? "Om mindre än en timme. Dags att packa väskan!" :
+              hoursLeft<24 ? "Om "+Math.round(hoursLeft)+" timmar" : "Om "+diffDays+" dagar";
+  el.innerHTML='<small>Nästa pass</small><div class="when"></div><div class="sub"></div>';
+  el.querySelector(".when").textContent=label+" "+pad(hh)+":"+pad(mm);
+  el.querySelector(".sub").textContent=sub;
+}
+
+/* ---------- log ---------- */
+function renderExChips(){
+  const box=$("exChips"); box.innerHTML="";
+  state.exercises.forEach(ex=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=ex;
+    b.setAttribute("aria-pressed", ex===currentEx);
+    b.onclick=()=>{ currentEx=ex; renderExChips(); prefill(); };
+    box.appendChild(b);
+  });
+  const add=document.createElement("button"); add.type="button"; add.className="chip add"; add.textContent="+ Ny övning";
+  add.onclick=()=>{ go("v-plan"); setTimeout(()=>$("newEx").focus(),50); };
+  box.appendChild(add);
+}
+function prefill(){
+  const list=state.sets.filter(s=>s.ex===currentEx);
+  const hint=$("lastHint");
+  if(!list.length){ hint.textContent="Första gången du loggar "+currentEx.toLowerCase()+". Välj reps och vikt nedan."; return; }
+  const last=list[list.length-1];
+  const lastDate=last.date;
+  const sameDay=list.filter(s=>s.date===lastDate);
+  const top=sameDay.reduce((a,b)=> b.kg>a.kg ? b : a, sameDay[0]);
+  hint.textContent="Förra gången ("+shortDate(lastDate)+"): "+sameDay.length+" set, tyngsta "+top.reps+" × "+fmt(top.kg)+" kg.";
+  $("reps").value=last.reps; $("kg").value=String(last.kg).replace(".",",");
+}
+function renderSession(){
+  const date=$("logDate").value||todayStr();
+  $("sessTitle").textContent = date===todayStr() ? "Dagens pass" : "Passet "+shortDate(date);
+  const box=$("sess"); box.innerHTML="";
+  const sets=state.sets.filter(s=>s.date===date);
+  const acts=state.activities.filter(a=>a.date===date);
+  if(!sets.length && !acts.length){ box.innerHTML='<div class="empty">Inget loggat än. Lägg till ett set eller ett pass ovanför.</div>'; return; }
+  if(acts.length){
+    const g=document.createElement("div"); g.className="exgroup";
+    const h=document.createElement("h3"); h.textContent="Andra pass"; g.appendChild(h);
+    const l=document.createElement("div"); l.className="setlist";
+    acts.forEach(a=>{
+      const chip=document.createElement("span"); chip.className="actitem";
+      chip.appendChild(document.createTextNode(a.type+", "+a.min+" min"));
+      const del=document.createElement("button"); del.type="button"; del.textContent="✕";
+      del.setAttribute("aria-label","Ta bort "+a.type);
+      del.onclick=()=>{ state.activities=state.activities.filter(x=>x.id!==a.id); save(); renderSession(); renderWeek(); toast("Pass borttaget"); };
+      chip.appendChild(del); l.appendChild(chip);
+    });
+    g.appendChild(l); box.appendChild(g);
+  }
+  const order=[]; sets.forEach(s=>{ if(!order.includes(s.ex)) order.push(s.ex); });
+  order.forEach(ex=>{
+    const g=document.createElement("div"); g.className="exgroup";
+    const h=document.createElement("h3"); h.textContent=ex; g.appendChild(h);
+    const l=document.createElement("div"); l.className="setlist";
+    sets.filter(s=>s.ex===ex).forEach(s=>{
+      const chip=document.createElement("span"); chip.className="set"+(s.pr?" pr":"");
+      chip.appendChild(document.createTextNode(s.reps+" × "+fmt(s.kg)+" kg"));
+      const del=document.createElement("button"); del.type="button"; del.textContent="✕";
+      del.setAttribute("aria-label","Ta bort set "+s.reps+" gånger "+fmt(s.kg)+" kilo");
+      del.onclick=()=>{ state.sets=state.sets.filter(x=>x.id!==s.id); save(); renderSession(); renderProg(); toast("Set borttaget"); };
+      chip.appendChild(del); l.appendChild(chip);
+    });
+    g.appendChild(l); box.appendChild(g);
+  });
+}
+function addSet(){
+  const reps=Math.round(num($("reps").value)); const kg=num($("kg").value);
+  if(!(reps>0)){ toast("Fyll i antal reps"); return; }
+  if(!(kg>=0)){ toast("Fyll i en vikt"); return; }
+  const date=$("logDate").value||todayStr();
+  const prevBest=bestRm(currentEx);
+  const isPr = prevBest>0 && est1rm(kg,reps)>prevBest+0.01;
+  const s={id:uid(),date,ex:currentEx,reps,kg,pr:isPr};
+  state.sets.push(s);
+  state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  save(); renderSession(); renderProg(); renderWeek();
+  if(isPr){ toast("Nytt personbästa i "+currentEx.toLowerCase()+"!"); confetti(); }
+  else toast("Set sparat");
+}
+
+/* ---------- other sessions ---------- */
+function renderActChips(){
+  const box=$("actChips"); box.innerHTML="";
+  state.activityTypes.forEach(t=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=t;
+    b.setAttribute("aria-pressed", t===currentAct);
+    b.onclick=()=>{ currentAct=t; renderActChips(); };
+    box.appendChild(b);
+  });
+  const add=document.createElement("button"); add.type="button"; add.className="chip add"; add.textContent="+ Ny passtyp";
+  add.onclick=()=>{ go("v-plan"); setTimeout(()=>$("newAct").focus(),50); };
+  box.appendChild(add);
+}
+function addAct(){
+  const min=Math.round(num($("mins").value));
+  if(!(min>0)){ toast("Fyll i hur många minuter"); return; }
+  const date=$("logDate").value||todayStr();
+  state.activities.push({id:uid(),date,type:currentAct,min});
+  state.activities.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+  save(); renderSession(); renderWeek(); toast(currentAct+" sparat");
+}
+function setMode(m){
+  document.querySelectorAll("#mode button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.mode===m));
+  $("strBox").hidden = m!=="str"; $("actBox").hidden = m!=="act";
+}
+
+/* ---------- weekly overview ---------- */
+function mondayOf(d){ const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); const wd=(x.getDay()+6)%7; x.setDate(x.getDate()-wd); return x; }
+function dstr(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function renderWeek(){
+  const thisMon=mondayOf(new Date()); const weeks=[];
+  for(let i=7;i>=0;i--){ const m=new Date(thisMon); m.setDate(m.getDate()-7*i); const e=new Date(m); e.setDate(e.getDate()+7); weeks.push({start:dstr(m),end:dstr(e),label:shortDate(dstr(m))}); }
+  const strDates=[...new Set(state.sets.map(s=>s.date))];
+  const str=weeks.map(w=>strDates.filter(d=>d>=w.start && d<w.end).length);
+  const oth=weeks.map(w=>state.activities.filter(a=>a.date>=w.start && a.date<w.end).length);
+  const mins=state.activities.filter(a=>a.date>=weeks[7].start).reduce((s,a)=>s+a.min,0);
+  const st=$("weekStats"); st.innerHTML="";
+  [[String(str[7]+oth[7]),"Pass denna vecka"],[String(str[7]),"Styrkepass"],[mins+" min","Andra pass"]].forEach(([b,s])=>{
+    const d=document.createElement("div"); d.className="stat";
+    d.innerHTML="<b></b><span></span>"; d.querySelector("b").textContent=b; d.querySelector("span").textContent=s;
+    st.appendChild(d);
+  });
+  if(weekChart) weekChart.destroy();
+  if(typeof Chart==="undefined") return;
+  const muted=css("--muted"), line=css("--line");
+  weekChart=new Chart($("weekChart"),{
+    type:"bar",
+    data:{labels:weeks.map(w=>w.label), datasets:[
+      {label:"Styrka", data:str, backgroundColor:css("--pink"), borderRadius:8, stack:"s"},
+      {label:"Andra pass", data:oth, backgroundColor:css("--sky"), borderRadius:8, stack:"s"}
+    ]},
+    options:{responsive:true, maintainAspectRatio:false, animation:{duration:400},
+      plugins:{legend:{display:false}, tooltip:{callbacks:{title:(it)=>"Veckan från "+it[0].label}}},
+      scales:{
+        x:{stacked:true, grid:{display:false}, ticks:{color:muted, font:{family:"Bricolage Grotesque"}}},
+        y:{stacked:true, beginAtZero:true, grid:{color:line}, border:{display:false}, ticks:{color:muted, precision:0, stepSize:1, font:{family:"Bricolage Grotesque"}}}
+      }}
+  });
+}
+
+/* ---------- progress ---------- */
+function renderProgChips(){
+  const box=$("progChips"); box.innerHTML="";
+  state.exercises.forEach(ex=>{
+    const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=ex;
+    b.setAttribute("aria-pressed", ex===progEx);
+    b.onclick=()=>{ progEx=ex; renderProgChips(); renderProg(); };
+    box.appendChild(b);
+  });
+}
+function sessionsFor(ex){
+  const by={};
+  state.sets.filter(s=>s.ex===ex).forEach(s=>{
+    const d=by[s.date]||(by[s.date]={kg:0,rm:0,vol:0});
+    d.kg=Math.max(d.kg,s.kg); d.rm=Math.max(d.rm,est1rm(s.kg,s.reps)); d.vol+=s.kg*s.reps;
+  });
+  return Object.keys(by).sort().map(date=>({date,...by[date]}));
+}
+function renderProg(){
+  const ses=sessionsFor(progEx);
+  const vals=ses.map(s=>s[metric]);
+  const unit = "kg";
+  const st=$("progStats");
+  if(!ses.length){
+    st.innerHTML='<div class="stat"><b>–</b><span>Första</span></div><div class="stat"><b>–</b><span>Bästa</span></div><div class="stat"><b>–</b><span>Ökning</span></div>';
+  }else{
+    const first=vals[0], best=Math.max(...vals), diff=vals[vals.length-1]-first;
+    st.innerHTML="";
+    [[fmt(first)+" "+unit,"Första passet"],[fmt(best)+" "+unit,"Bästa"],[(diff>=0?"+":"")+fmt(diff)+" "+unit,"Ökning"]].forEach(([b,s])=>{
+      const d=document.createElement("div"); d.className="stat";
+      d.innerHTML="<b></b><span></span>"; d.querySelector("b").textContent=b; d.querySelector("span").textContent=s;
+      st.appendChild(d);
+    });
+  }
+  drawLine("prog", ses.map(s=>shortDate(s.date)), [{data:vals, color:css("--pink"), fill:true}],
+           ses.length ? null : "Logga "+progEx.toLowerCase()+" så dyker kurvan upp här.");
+}
+
+/* ---------- body weight ---------- */
+function renderBw(){
+  const w=state.weights.slice().sort((a,b)=>a.date<b.date?-1:1);
+  const labels=w.map(x=>shortDate(x.date)); const vals=w.map(x=>x.kg);
+  const avg=vals.map((_,i)=> i<6 ? null : Math.round(vals.slice(i-6,i+1).reduce((a,b)=>a+b,0)/7*10)/10);
+  drawLine("bw", labels, [
+    {data:vals, color:css("--sky"), fill:false, thin:true},
+    {data:avg, color:css("--grape"), fill:false}
+  ], w.length ? null : "Spara din första vägning ovanför.");
+  const st=$("bwStats");
+  if(!w.length){ st.innerHTML=""; }
+  else{
+    const diff=vals[vals.length-1]-vals[0];
+    st.innerHTML="";
+    [[fmt(vals[0])+" kg","Start"],[fmt(vals[vals.length-1])+" kg","Senast"],[(diff>=0?"+":"")+fmt(diff)+" kg","Förändring"]].forEach(([b,s])=>{
+      const d=document.createElement("div"); d.className="stat";
+      d.innerHTML="<b></b><span></span>"; d.querySelector("b").textContent=b; d.querySelector("span").textContent=s;
+      st.appendChild(d);
+    });
+  }
+  const ul=$("bwList"); ul.innerHTML="";
+  if(!w.length){ ul.innerHTML='<li class="empty" style="justify-content:center">Inga vägningar än.</li>'; return; }
+  w.slice().reverse().slice(0,30).forEach(x=>{
+    const li=document.createElement("li");
+    const t=document.createElement("span"); t.textContent=shortDate(x.date)+"   "+fmt(x.kg)+" kg";
+    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort vägning");
+    del.onclick=()=>{ state.weights=state.weights.filter(y=>y!==x); save(); renderBw(); };
+    li.appendChild(t); li.appendChild(del); ul.appendChild(li);
+  });
+}
+function addBw(){
+  const kg=num($("bw").value); const date=$("bwDate").value||todayStr();
+  if(!(kg>20 && kg<400)){ toast("Skriv vikten i kilo, t.ex. 80,4"); return; }
+  state.weights=state.weights.filter(x=>x.date!==date);
+  state.weights.push({date,kg});
+  $("bw").value=""; save(); renderBw(); toast("Vikt sparad");
+}
+
+/* ---------- charts ---------- */
+function drawLine(which, labels, series, emptyMsg){
+  const canvas=$(which==="prog"?"progChart":"bwChart");
+  const old= which==="prog"?progChart:bwChart; if(old) old.destroy();
+  if(typeof Chart==="undefined"){ return; }
+  const ink=css("--ink"), muted=css("--muted"), line=css("--line");
+  const chart=new Chart(canvas,{
+    type:"line",
+    data:{labels, datasets:series.map(s=>({
+      data:s.data, borderColor:s.color, backgroundColor:s.color+"33", fill:!!s.fill,
+      borderWidth:s.thin?2:4, pointRadius:s.thin?3:5, pointBackgroundColor:s.color,
+      tension:.35, spanGaps:true
+    }))},
+    options:{
+      responsive:true, maintainAspectRatio:false, animation:{duration:400},
+      plugins:{legend:{display:false}, tooltip:{displayColors:false}},
+      scales:{
+        x:{grid:{display:false}, ticks:{color:muted, maxRotation:0, autoSkip:true, maxTicksLimit:6, font:{family:"Bricolage Grotesque"}}},
+        y:{grid:{color:line}, border:{display:false}, ticks:{color:muted, font:{family:"Bricolage Grotesque"}}}
+      }
+    },
+    plugins:[{id:"empty", afterDraw(c){
+      if(!emptyMsg) return; const {ctx,chartArea:a}=c; ctx.save();
+      ctx.fillStyle=muted; ctx.textAlign="center"; ctx.font="600 15px 'Bricolage Grotesque', sans-serif";
+      ctx.fillText(emptyMsg,(a.left+a.right)/2,(a.top+a.bottom)/2); ctx.restore();
+    }}]
+  });
+  if(which==="prog") progChart=chart; else bwChart=chart;
+}
+
+/* ---------- plan ---------- */
+function renderPlan(){
+  const box=$("days"); box.innerHTML="";
+  DAY_ORDER.forEach(d=>{
+    const b=document.createElement("button"); b.type="button"; b.className="day"; b.textContent=DAYS[d].slice(0,1);
+    b.setAttribute("aria-label",DAYS_LONG[d]); b.setAttribute("aria-pressed", state.schedule.days.includes(d));
+    b.onclick=()=>{
+      const set=new Set(state.schedule.days); set.has(d)?set.delete(d):set.add(d);
+      state.schedule.days=[...set]; save(); renderPlan(); renderNext();
+    };
+    box.appendChild(b);
+  });
+  $("time").value=state.schedule.time||"18:00";
+  const al=$("actList"); al.innerHTML="";
+  state.activityTypes.forEach(t=>{
+    const li=document.createElement("li");
+    const s=document.createElement("span"); s.textContent=t;
+    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort "+t);
+    del.onclick=()=>{
+      if(state.activityTypes.length<2){ toast("Du behöver minst en passtyp"); return; }
+      state.activityTypes=state.activityTypes.filter(x=>x!==t);
+      if(currentAct===t) currentAct=state.activityTypes[0];
+      save(); renderAll();
+    };
+    li.appendChild(s); li.appendChild(del); al.appendChild(li);
+  });
+  const ul=$("exList"); ul.innerHTML="";
+  state.exercises.forEach(ex=>{
+    const li=document.createElement("li");
+    const t=document.createElement("span"); t.textContent=ex;
+    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort "+ex);
+    del.onclick=()=>{
+      if(state.exercises.length<2){ toast("Du behöver minst en övning"); return; }
+      const has=state.sets.some(s=>s.ex===ex);
+      if(has && !confirm("Ta bort "+ex+"? Dina loggade set finns kvar men övningen döljs i listan.")) return;
+      state.exercises=state.exercises.filter(x=>x!==ex);
+      if(currentEx===ex) currentEx=state.exercises[0];
+      if(progEx===ex) progEx=state.exercises[0];
+      save(); renderAll();
+    };
+    li.appendChild(t); li.appendChild(del); ul.appendChild(li);
+  });
+}
+function addEx(){
+  const name=$("newEx").value.trim();
+  if(!name){ toast("Skriv ett namn på övningen"); return; }
+  if(state.exercises.some(e=>e.toLowerCase()===name.toLowerCase())){ toast("Den övningen finns redan"); return; }
+  state.exercises.push(name); currentEx=name; $("newEx").value=""; save(); renderAll(); toast(name+" tillagd");
+}
+
+function addActType(){
+  const name=$("newAct").value.trim();
+  if(!name){ toast("Skriv ett namn på passtypen"); return; }
+  if(state.activityTypes.some(e=>e.toLowerCase()===name.toLowerCase())){ toast("Den passtypen finns redan"); return; }
+  state.activityTypes.push(name); currentAct=name; $("newAct").value=""; save(); renderAll(); toast(name+" tillagd");
+}
+
+/* ---------- nav ---------- */
+function go(v){
+  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("on", s.id===v));
+  document.querySelectorAll("nav.tabs button").forEach(b=> b.dataset.v===v ? b.setAttribute("aria-current","page") : b.removeAttribute("aria-current"));
+  window.scrollTo(0,0);
+  if(v==="v-prog"){ renderWeek(); renderProg(); }
+  if(v==="v-body") renderBw();
+}
+function renderAll(){ renderNext(); renderExChips(); renderActChips(); renderWeek(); prefill(); renderSession(); renderProgChips(); renderProg(); renderBw(); renderPlan(); }
+
+/* ---------- events ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b=> b.onclick=()=>go(b.dataset.v));
+$("next").addEventListener("click",e=>{ const g=e.target.closest("[data-go]"); if(g) go(g.dataset.go); });
+document.querySelectorAll("[data-step]").forEach(b=> b.onclick=()=>{
+  const inp=$(b.dataset.step); const d=parseFloat(b.dataset.d);
+  let v=num(inp.value); if(!isFinite(v)) v=0; v=Math.max(0, Math.round((v+d)*10)/10);
+  inp.value=String(v).replace(".",",");
+});
+document.querySelectorAll("#metric button").forEach(b=> b.onclick=()=>{
+  metric=b.dataset.m; document.querySelectorAll("#metric button").forEach(x=>x.setAttribute("aria-pressed", x===b)); renderProg();
+});
+$("addSet").onclick=addSet;
+$("addBw").onclick=addBw;
+$("bw").addEventListener("keydown",e=>{ if(e.key==="Enter") addBw(); });
+$("addEx").onclick=addEx;
+$("exportBtn").onclick=exportData;
+$("importBtn").onclick=()=>$("importFile").click();
+$("importFile").addEventListener("change",e=>{ const f=e.target.files[0]; if(f) importData(f); e.target.value=""; });
+$("addAct").onclick=addAct;
+$("addActType").onclick=addActType;
+$("newAct").addEventListener("keydown",e=>{ if(e.key==="Enter") addActType(); });
+document.querySelectorAll("#mode button").forEach(b=> b.onclick=()=>setMode(b.dataset.mode));
+$("newEx").addEventListener("keydown",e=>{ if(e.key==="Enter") addEx(); });
+$("logDate").addEventListener("change",renderSession);
+$("time").addEventListener("change",e=>{ state.schedule.time=e.target.value||"18:00"; save(); renderNext(); });
+setInterval(renderNext, 60000);
+
+$("logDate").value=todayStr(); $("bwDate").value=todayStr();
+loadLocal(); renderAll(); connect();
+})();
+</script>
+</body>
+</html>
