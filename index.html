@@ -16,6 +16,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.116.0/dist/umd/supabase.js"></script>
 <style>
 :root{
   color-scheme: light;
@@ -134,6 +135,8 @@ input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(
 .exman li{display:flex;justify-content:space-between;align-items:center}
 .plan-when{font-weight:800}
 .plan-type{display:block;font-size:14px;color:var(--muted)}
+.acct-msg{font-size:14px;margin:8px 2px 0;min-height:1em}
+.acct-msg.err{color:var(--pink)}
 .small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
 
 nav.tabs{
@@ -336,9 +339,29 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
       </div>
     </div>
 
+    <h2>Konto och synk</h2>
+    <div class="card" id="acctOut">
+      <p class="hint" style="margin-top:0">Logga in så sparas din träning i molnet och finns kvar även om du byter telefon. Du kan också se den på datorn.</p>
+      <div class="field"><label for="acctEmail">E-post</label><input id="acctEmail" class="plain" type="email" autocomplete="username" inputmode="email" autocapitalize="off"></div>
+      <div class="field" style="margin-top:10px"><label for="acctPw">Lösenord</label><input id="acctPw" class="plain" type="password" autocomplete="current-password"></div>
+      <div class="row" style="margin-top:12px">
+        <button class="small-btn" id="signInBtn" style="flex:1;background:var(--grape);color:var(--onGrape);border-color:var(--grape)">Logga in</button>
+        <button class="small-btn" id="signUpBtn" style="flex:1">Skapa konto</button>
+      </div>
+      <p class="acct-msg" id="acctMsg" role="status"></p>
+    </div>
+    <div class="card" id="acctIn" hidden>
+      <p style="margin:0">Inloggad som <b id="acctWho"></b></p>
+      <p class="hint" id="acctSync" style="margin:6px 0 12px"></p>
+      <div class="row">
+        <button class="small-btn" id="syncNowBtn" style="flex:1">Synka nu</button>
+        <button class="small-btn" id="signOutBtn" style="flex:1">Logga ut</button>
+      </div>
+    </div>
+
     <h2>Säkerhetskopia</h2>
     <div class="card">
-      <p class="hint" style="margin-top:0">Din data sparas bara på den här enheten. Spara en kopia då och då, till exempel i Filer eller iCloud Drive. Du kan också använda den för att flytta datan till en annan telefon.</p>
+      <p class="hint" style="margin-top:0">Vill du ha en egen kopia av all din data kan du spara den som en fil, till exempel i Filer eller iCloud Drive.</p>
       <div class="row">
         <button class="small-btn" id="exportBtn" style="flex:1">Spara kopia</button>
         <button class="small-btn" id="importBtn" style="flex:1">Läs in kopia</button>
@@ -408,7 +431,9 @@ let state = {
 let currentEx = state.exercises[0];
 let progEx = state.exercises[0];
 let metric = "kg";
-let db = null, docRef = null, saveTimer = null;
+const SB_URL = "https://lbsqgrvxmtyjisnmomwx.supabase.co";
+const SB_KEY = "sb_publishable_SX2JXHZsOtU9MJTGDdNPTw_H5ChbseI";
+let sb = null, sbUser = null, pushTimer = null, pending = false, syncing = false, lastSync = 0;
 let progChart = null, bwChart = null, weekChart = null;
 let currentAct = "Yoga";
 
@@ -439,19 +464,96 @@ function merge(s){
   if(!state.exercises.includes(currentEx)) currentEx=state.exercises[0];
   if(!state.exercises.includes(progEx)) progEx=state.exercises[0];
 }
+function writeLocal(){ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} }
 function save(){
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
-  if(!docRef) return;
-  clearTimeout(saveTimer);
-  $("sync").textContent = "Sparar…";
-  saveTimer = setTimeout(async ()=>{
-    try{ await docRef.set(JSON.parse(JSON.stringify(state))); $("sync").textContent = "Sparat"; }
-    catch(e){ $("sync").textContent = "Sparat på den här enheten"; }
-  }, 700);
+  state.updatedAt = Date.now();
+  writeLocal();
+  if(sbUser){ pending = true; clearTimeout(pushTimer); pushTimer = setTimeout(push, 1000); setSync("Sparar…"); }
+}
+function hasData(s){ return !!s && ((s.sets||[]).length || (s.weights||[]).length || (s.activities||[]).length || (s.planned||[]).length); }
+function setSync(t){
+  $("sync").textContent = t;
+  const el=$("acctSync"); if(!el) return;
+  el.textContent = t==="Synkat" && lastSync ? "Synkat "+new Date(lastSync).toLocaleTimeString("sv-SE",{hour:"2-digit",minute:"2-digit"})+". Allt sparas automatiskt." : t;
+}
+async function push(){
+  if(!sb || !sbUser || syncing) return;
+  syncing = true;
+  try{
+    const { error } = await sb.from("tracy_state").upsert({
+      user_id: sbUser.id,
+      data: JSON.parse(JSON.stringify(state)),
+      updated_at: new Date(state.updatedAt || Date.now()).toISOString()
+    }, { onConflict: "user_id" });
+    if(error) throw error;
+    pending = false; lastSync = Date.now(); setSync("Synkat");
+  }catch(e){ pending = true; setSync(navigator.onLine===false ? "Offline, synkar senare" : "Kunde inte synka, försöker igen"); }
+  finally{ syncing = false; }
+}
+async function pull(){
+  if(!sb || !sbUser) return;
+  if(pending){ return push(); }
+  setSync("Synkar…");
+  try{
+    const { data, error } = await sb.from("tracy_state").select("data, updated_at").eq("user_id", sbUser.id).maybeSingle();
+    if(error) throw error;
+    if(!data || !hasData(data.data)){
+      if(hasData(state)){ if(!state.updatedAt) state.updatedAt = Date.now(); writeLocal(); return push(); }
+      lastSync = Date.now(); setSync("Synkat"); return;
+    }
+    const remoteTs = Date.parse(data.updated_at) || 0;
+    const localTs = state.updatedAt || 0;
+    if(hasData(state) && localTs > remoteTs){ return push(); }
+    if(remoteTs > localTs || !hasData(state)){
+      if(hasData(state)){ try{ localStorage.setItem("tracy-backup-before-sync", JSON.stringify(state)); }catch(e){} }
+      merge(data.data); state.updatedAt = remoteTs; writeLocal(); renderAll();
+    }
+    lastSync = Date.now(); setSync("Synkat");
+  }catch(e){ setSync(navigator.onLine===false ? "Offline, synkar senare" : "Kunde inte synka just nu"); }
+}
+function showAccount(){
+  const inn = !!sbUser;
+  $("acctOut").hidden = inn; $("acctIn").hidden = !inn;
+  if(inn){ $("acctWho").textContent = sbUser.email || ""; }
+  else { setSync("Sparas på den här enheten"); }
+}
+function acctMsg(t, err){ const m=$("acctMsg"); m.textContent=t||""; m.classList.toggle("err", !!err); }
+function niceError(e){
+  const m = (e && e.message || "").toLowerCase();
+  if(m.includes("invalid login")) return "Fel e-post eller lösenord.";
+  if(m.includes("already registered") || m.includes("already been registered")) return "Det finns redan ett konto med den e-posten. Tryck på Logga in i stället.";
+  if(m.includes("signup") && m.includes("not allowed")) return "Det går inte att skapa nya konton.";
+  if(m.includes("password") && (m.includes("6") || m.includes("short") || m.includes("weak"))) return "Lösenordet är för kort eller för enkelt. Välj minst 8 tecken.";
+  if(m.includes("email") && m.includes("invalid")) return "Kontrollera e-postadressen.";
+  if(m.includes("fetch") || m.includes("network")) return "Ingen kontakt med servern. Kontrollera uppkopplingen.";
+  return "Något gick fel: "+(e && e.message || "okänt fel");
+}
+async function signIn(create){
+  if(!sb){ acctMsg("Inloggningen kunde inte laddas. Kontrollera uppkopplingen och ladda om appen.", true); return; }
+  const email=$("acctEmail").value.trim(), password=$("acctPw").value;
+  if(!email || !password){ acctMsg("Fyll i e-post och lösenord.", true); return; }
+  acctMsg(create ? "Skapar konto…" : "Loggar in…");
+  try{
+    const res = create ? await sb.auth.signUp({ email, password }) : await sb.auth.signInWithPassword({ email, password });
+    if(res.error) throw res.error;
+    if(create && !res.data.session){ acctMsg("Kontot är skapat men kräver bekräftelse via e-post. Stäng av Confirm email i Supabase och försök igen.", true); return; }
+    $("acctPw").value=""; acctMsg("");
+    toast(create ? "Konto skapat" : "Inloggad");
+  }catch(e){ acctMsg(niceError(e), true); }
 }
 async function connect(){
-  $("sync").textContent = "Sparas på den här enheten";
   try{ if(navigator.storage && navigator.storage.persist) await navigator.storage.persist(); }catch(e){}
+  if(!window.supabase || !window.supabase.createClient){ setSync("Sparas på den här enheten"); return; }
+  sb = window.supabase.createClient(SB_URL, SB_KEY, { auth:{ persistSession:true, autoRefreshToken:true, storageKey:"tracy-auth", detectSessionInUrl:false } });
+  sb.auth.onAuthStateChange((event, session)=>{
+    const was = sbUser && sbUser.id;
+    sbUser = session ? session.user : null;
+    showAccount();
+    if(sbUser && (event==="SIGNED_IN" || event==="INITIAL_SESSION") && was!==sbUser.id){ setTimeout(pull, 0); }
+  });
+  showAccount();
+  window.addEventListener("online", ()=>{ if(sbUser) (pending ? push() : pull()); });
+  document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible" && sbUser) (pending ? push() : pull()); });
 }
 function exportData(){
   const blob=new Blob([JSON.stringify(state,null,2)],{type:"application/json"});
@@ -930,6 +1032,15 @@ $("addBw").onclick=addBw;
 $("bw").addEventListener("keydown",e=>{ if(e.key==="Enter") addBw(); });
 $("addEx").onclick=addEx;
 $("exportBtn").onclick=exportData;
+$("signInBtn").onclick=()=>signIn(false);
+$("signUpBtn").onclick=()=>signIn(true);
+$("acctPw").addEventListener("keydown",e=>{ if(e.key==="Enter") signIn(false); });
+$("syncNowBtn").onclick=()=>{ pending ? push() : pull(); };
+$("signOutBtn").onclick=async ()=>{
+  if(!confirm("Logga ut? Din data finns kvar på den här enheten men synkas inte förrän du loggar in igen.")) return;
+  try{ await sb.auth.signOut(); }catch(e){}
+  sbUser=null; showAccount(); toast("Utloggad");
+};
 $("importBtn").onclick=()=>$("importFile").click();
 $("importFile").addEventListener("change",e=>{ const f=e.target.files[0]; if(f) importData(f); e.target.value=""; });
 $("addAct").onclick=addAct;
