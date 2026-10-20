@@ -183,6 +183,9 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
 .party .buddy{display:block;width:100%;height:100%;object-fit:cover;border-radius:28px;border:4px solid var(--surface);box-shadow:0 0 0 4px var(--pink)}
 .party.show .buddywrap{animation:enter .55s cubic-bezier(.3,1.6,.5,1) both}
 .party.show .buddy{animation:hop .9s ease-in-out .55s infinite}
+.party .snd{position:absolute;right:10px;bottom:10px;z-index:2;width:44px;height:44px;border-radius:50%;border:0;background:rgba(34,22,79,.7);color:#fff;display:flex;align-items:center;justify-content:center}
+.party .snd svg{width:22px;height:22px}
+.party .buddywrap .buddy{background:#C9B8EA}
 .spark{position:absolute;width:18px;height:18px;background:var(--sun);clip-path:polygon(50% 0,62% 38%,100% 50%,62% 62%,50% 100%,38% 62%,0 50%,38% 38%);opacity:0}
 .s1{top:-10px;left:-14px}.s2{top:40%;right:-18px;background:var(--lime)}.s3{bottom:6px;left:-20px;background:var(--sky)}
 .party.show .spark{animation:twinkle 1.2s ease-in-out infinite}
@@ -402,7 +405,10 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
 
 <div class="party" id="party" role="dialog" aria-modal="true" aria-labelledby="partyTitle">
   <div class="buddywrap">
-    <img class="buddy" src="tracy.jpg" alt="Tracy jublar" width="480" height="720">
+    <video class="buddy" id="partyVid" playsinline preload="auto" poster="record-poster.jpg"></video>
+    <button type="button" class="snd" id="partySnd" aria-label="Stäng av ljud">
+      <svg id="partySndIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"></svg>
+    </button>
     <span class="spark s1" aria-hidden="true"></span><span class="spark s2" aria-hidden="true"></span><span class="spark s3" aria-hidden="true"></span>
   </div>
   <h3 id="partyTitle"></h3>
@@ -595,13 +601,33 @@ function confetti(){
 const LIFT_LINES=["Starkare än någonsin!","Kolla på dig!","Det där var tungt. Och du lyfte det.","Nytt rekord i boken!","Stången fick sig en överraskning."];
 const BODY_LINES=["Ny lägstanivå!","Det går åt rätt håll!","Fint jobbat!","Steg för steg, och det syns."];
 function pick(a){ return a[Math.floor(Math.random()*a.length)]; }
-function celebrate(title, text){
+const CLIPS = {
+  record: { src:"record.mp4", poster:"record-poster.jpg" },
+  weight: { src:"weight.mp4", poster:"weight-poster.jpg" }
+};
+const SND_ON='<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13"/>';
+const SND_OFF='<path d="M11 5L6 9H3v6h3l5 4z"/><path d="M22 9l-6 6M16 9l6 6"/>';
+let soundOn = true; try{ soundOn = localStorage.getItem("tracy-sound")!=="off"; }catch(e){}
+function partySndIcon(){
+  const v=$("partyVid");
+  $("partySndIcon").innerHTML = v.muted ? SND_OFF : SND_ON;
+  $("partySnd").setAttribute("aria-label", v.muted ? "Slå på ljud" : "Stäng av ljud");
+}
+function celebrate(title, text, clip){
   $("partyTitle").textContent=title; $("partyText").textContent=text;
-  const p=$("party"); p.classList.add("show"); confetti();
-  clearTimeout(p._h); p._h=setTimeout(closeParty,6000);
+  const p=$("party"), v=$("partyVid"), c=CLIPS[clip]||CLIPS.record;
+  v.src=c.src; v.poster=c.poster; v.muted=!soundOn; partySndIcon();
+  p.classList.add("show"); confetti();
+  const reduce=window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if(!reduce){
+    const pr=v.play();
+    if(pr && pr.catch) pr.catch(()=>{ v.muted=true; partySndIcon(); v.play().catch(()=>{}); });
+  }
+  clearTimeout(p._h); p._h=setTimeout(closeParty,15000);
+  v.onended=()=>{ clearTimeout(p._h); p._h=setTimeout(closeParty,1200); };
   setTimeout(()=>$("partyClose").focus(),50);
 }
-function closeParty(){ $("party").classList.remove("show"); }
+function closeParty(){ $("party").classList.remove("show"); try{ $("partyVid").pause(); }catch(e){} }
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function bestRm(ex, excludeId){
   let b=0; state.sets.forEach(s=>{ if(s.ex===ex && s.id!==excludeId){ b=Math.max(b,est1rm(s.kg,s.reps)); } }); return b;
@@ -706,7 +732,7 @@ function addSet(){
   state.sets.push(s);
   state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   save(); renderSession(); renderProg(); renderWeek();
-  if(heavier){ celebrate(pick(LIFT_LINES), "Tyngsta "+currentEx.toLowerCase()+" hittills: "+fmt(kg)+" kg. Det är "+fmt(kg-prevMaxKg)+" kg mer än ditt förra rekord."); }
+  if(heavier){ celebrate(pick(LIFT_LINES), "Tyngsta "+currentEx.toLowerCase()+" hittills: "+fmt(kg)+" kg. Det är "+fmt(kg-prevMaxKg)+" kg mer än ditt förra rekord.", "record"); }
   else if(isPr){ toast("Nytt personbästa i "+currentEx.toLowerCase()+"!"); confetti(); }
   else toast("Set sparat");
 }
@@ -846,7 +872,7 @@ function addBw(){
   const prevMin=state.weights.length ? Math.min(...state.weights.map(x=>x.kg)) : 0;
   state.weights.push({date,kg});
   $("bw").value=""; save(); renderBw();
-  if(prevMin>0 && kg<prevMin){ celebrate(pick(BODY_LINES), "Din lägsta vikt hittills: "+fmt(kg)+" kg. Det är "+fmt(prevMin-kg)+" kg mindre än förra lägstanivån."); }
+  if(prevMin>0 && kg<prevMin){ celebrate(pick(BODY_LINES), "Din lägsta vikt hittills: "+fmt(kg)+" kg. Det är "+fmt(prevMin-kg)+" kg mindre än förra lägstanivån.", "weight"); }
   else toast("Vikt sparad");
 }
 
@@ -974,6 +1000,12 @@ document.querySelectorAll("#metric button").forEach(b=> b.onclick=()=>{
 });
 $("addSet").onclick=addSet;
 $("partyClose").onclick=closeParty;
+$("partySnd").onclick=(e)=>{
+  e.stopPropagation();
+  const v=$("partyVid"); v.muted=!v.muted; soundOn=!v.muted;
+  try{ localStorage.setItem("tracy-sound", soundOn?"on":"off"); }catch(err){}
+  partySndIcon(); if(v.paused && !v.ended) v.play().catch(()=>{});
+};
 $("party").addEventListener("click",e=>{ if(e.target.id==="party") closeParty(); });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape") closeParty(); });
 
