@@ -154,6 +154,16 @@ input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(
 .ed-row select{text-align:left}
 .ed-tools{grid-column:1 / -1;display:flex;gap:6px;justify-content:flex-end}
 .ed-tools button{border:2px solid var(--line);background:var(--surface);border-radius:10px;width:40px;height:34px;font-weight:800}
+.grp-h{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 2px 4px}
+.grp-h:first-child{margin-top:0}
+.exbtn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;border:0;background:transparent;padding:10px 2px;border-top:2px solid var(--line);text-align:left;font-weight:600}
+.exbtn span:last-child{font-size:14px;color:var(--muted);font-weight:400;white-space:nowrap}
+.grp-h + .exbtn{border-top:0}
+.exd-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+.exd-stat{background:var(--bg);border-radius:14px;padding:10px 12px}
+.exd-stat b{display:block;font-size:20px;font-weight:800;letter-spacing:-0.02em}
+.exd-stat span{font-size:13px;color:var(--muted)}
+details.arch summary{cursor:pointer;color:var(--muted);font-weight:600;padding:6px 2px}
 .acct-msg{font-size:14px;margin:8px 2px 0;min-height:1em}
 .acct-msg.err{color:var(--pink)}
 .small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
@@ -370,13 +380,16 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
       </div>
     </div>
 
-    <h2>Övningar</h2>
+    <h2>Övningsbank</h2>
+    <div class="card" id="exDetail" hidden style="margin-bottom:10px"></div>
     <div class="card">
-      <ul class="wlist exman" id="exList"></ul>
-      <div class="row" style="margin-top:10px">
-        <input id="newEx" class="plain" placeholder="Ny övning, t.ex. Chins">
-        <button class="small-btn" id="addEx">Lägg till</button>
+      <div class="row">
+        <input id="newEx" class="plain" placeholder="Ny övning, t.ex. Chins" style="flex:2">
+        <select id="newExGroup" class="plain" style="flex:1" aria-label="Muskelgrupp"></select>
       </div>
+      <button class="small-btn" id="addEx" style="margin-top:8px;width:100%">Lägg till övning</button>
+      <div id="exList" style="margin-top:12px"></div>
+      <details class="arch" id="archBox" hidden><summary>Arkiverade övningar</summary><div id="archList"></div></details>
     </div>
 
     <h2>Konto och synk</h2>
@@ -470,6 +483,7 @@ let state = {
   activityTypes:["Yoga","Flexcore"], activities:[],
   planned:[],
   workouts:[], activeWorkout:null,
+  exMeta:{}, archived:[],
   schedule:{days:[1,3,5], time:"18:00"}
 };
 let currentEx = state.exercises[0];
@@ -504,6 +518,8 @@ function merge(s){
   if(!Array.isArray(state.activities)) state.activities=[];
   if(!Array.isArray(state.planned)) state.planned=[];
   if(!Array.isArray(state.workouts)) state.workouts=[];
+  if(!state.exMeta || typeof state.exMeta!=="object") state.exMeta={};
+  if(!Array.isArray(state.archived)) state.archived=[];
   if(state.activeWorkout && !Array.isArray(state.activeWorkout.items)) state.activeWorkout=null;
   if(!state.activityTypes.includes(currentAct)) currentAct=state.activityTypes[0];
   if(!state.schedule) state.schedule={days:[],time:"18:00"};
@@ -701,7 +717,7 @@ function renderNext(){
 /* ---------- log ---------- */
 function renderExChips(){
   const box=$("exChips"); box.innerHTML="";
-  state.exercises.forEach(ex=>{
+  sortedEx().forEach(ex=>{
     const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=ex;
     b.setAttribute("aria-pressed", ex===currentEx);
     b.onclick=()=>{ currentEx=ex; renderExChips(); prefill(); };
@@ -790,7 +806,6 @@ function woNextOpen(){
 }
 function selectWoItem(it, scroll){
   currentEx=it.ex;
-  if(!state.exercises.includes(it.ex)){ state.exercises.push(it.ex); }
   setMode("str"); renderExChips(); prefill();
   $("reps").value=it.reps;
   renderWorkout();
@@ -887,8 +902,13 @@ function renderWoRows(){
   editingWo.items.forEach((it,i)=>{
     const row=document.createElement("div"); row.className="ed-row";
     const sel=document.createElement("select"); sel.className="plain"; sel.setAttribute("aria-label","Övning "+(i+1));
-    const opts=state.exercises.includes(it.ex)?state.exercises:[it.ex,...state.exercises];
-    opts.forEach(e=>{ const o=document.createElement("option"); o.value=e; o.textContent=e; sel.appendChild(o); });
+    if(!state.exercises.includes(it.ex)){ const o=document.createElement("option"); o.value=it.ex; o.textContent=it.ex+" (arkiverad)"; sel.appendChild(o); }
+    GROUPS.forEach(g=>{
+      const list=state.exercises.filter(e=>groupOf(e)===g); if(!list.length) return;
+      const og=document.createElement("optgroup"); og.label=g;
+      list.forEach(e=>{ const o=document.createElement("option"); o.value=e; o.textContent=e; og.appendChild(o); });
+      sel.appendChild(og);
+    });
     sel.value=it.ex; sel.onchange=()=>{ it.ex=sel.value; };
     const sets=document.createElement("input"); sets.className="plain"; sets.inputMode="numeric"; sets.value=it.sets; sets.setAttribute("aria-label","Antal set");
     sets.oninput=()=>{ it.sets=Math.max(1,Math.round(num(sets.value))||1); };
@@ -984,7 +1004,8 @@ function renderWeek(){
 /* ---------- progress ---------- */
 function renderProgChips(){
   const box=$("progChips"); box.innerHTML="";
-  state.exercises.forEach(ex=>{
+  const list=sortedEx(); if(progEx && !list.includes(progEx)) list.push(progEx);
+  list.forEach(ex=>{
     const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=ex;
     b.setAttribute("aria-pressed", ex===progEx);
     b.onclick=()=>{ progEx=ex; renderProgChips(); renderProg(); };
@@ -1121,28 +1142,143 @@ function renderPlan(){
     };
     li.appendChild(s); li.appendChild(del); al.appendChild(li);
   });
-  const ul=$("exList"); ul.innerHTML="";
-  state.exercises.forEach(ex=>{
-    const li=document.createElement("li");
-    const t=document.createElement("span"); t.textContent=ex;
-    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort "+ex);
-    del.onclick=()=>{
-      if(state.exercises.length<2){ toast("Du behöver minst en övning"); return; }
-      const has=state.sets.some(s=>s.ex===ex);
-      if(has && !confirm("Ta bort "+ex+"? Dina loggade set finns kvar men övningen döljs i listan.")) return;
-      state.exercises=state.exercises.filter(x=>x!==ex);
-      if(currentEx===ex) currentEx=state.exercises[0];
-      if(progEx===ex) progEx=state.exercises[0];
-      save(); renderAll();
-    };
-    li.appendChild(t); li.appendChild(del); ul.appendChild(li);
-  });
+  renderExBank();
+}
+const GROUPS=["Ben","Bröst","Rygg","Axlar","Armar","Mage","Helkropp","Övrigt"];
+const DEFAULT_GROUP={"Knäböj":"Ben","Bänkpress":"Bröst","Marklyft":"Rygg","Militärpress":"Axlar","Rodd":"Rygg"};
+let openEx=null;
+function groupOf(ex){ const m=state.exMeta[ex]; return (m && m.group) || DEFAULT_GROUP[ex] || "Övrigt"; }
+function sortedEx(){ return GROUPS.flatMap(g=>state.exercises.filter(e=>groupOf(e)===g)); }
+function exStats(ex){
+  const sets=state.sets.filter(s=>s.ex===ex);
+  const dates=[...new Set(sets.map(s=>s.date))].sort();
+  let top=null, rm=0;
+  sets.forEach(s=>{ if(!top || s.kg>top.kg || (s.kg===top.kg && s.reps>top.reps)) top=s; rm=Math.max(rm,est1rm(s.kg,s.reps)); });
+  const lastDate=dates[dates.length-1]||null;
+  const lastSets=lastDate?sets.filter(s=>s.date===lastDate):[];
+  const inWo=state.workouts.filter(w=>w.items.some(it=>it.ex===ex)).map(w=>w.name);
+  return {sets,dates,top,rm,lastDate,lastSets,inWo};
 }
 function addEx(){
   const name=$("newEx").value.trim();
   if(!name){ toast("Skriv ett namn på övningen"); return; }
+  const arch=state.archived.find(e=>e.toLowerCase()===name.toLowerCase());
+  if(arch){ if(confirm(arch+" finns bland dina arkiverade övningar. Vill du plocka tillbaka den?")) restoreEx(arch); return; }
   if(state.exercises.some(e=>e.toLowerCase()===name.toLowerCase())){ toast("Den övningen finns redan"); return; }
-  state.exercises.push(name); currentEx=name; $("newEx").value=""; save(); renderAll(); toast(name+" tillagd");
+  state.exercises.push(name); state.exMeta[name]={group:$("newExGroup").value};
+  currentEx=name; $("newEx").value=""; save(); renderAll(); toast(name+" tillagd");
+}
+function renameEx(oldName, newName){
+  newName=newName.trim();
+  if(!newName || newName===oldName) return false;
+  const all=[...state.exercises,...state.archived];
+  if(all.some(e=>e!==oldName && e.toLowerCase()===newName.toLowerCase())){ toast("Det finns redan en övning med det namnet"); return false; }
+  const swap=e=> e===oldName ? newName : e;
+  state.exercises=state.exercises.map(swap);
+  state.archived=state.archived.map(swap);
+  state.sets.forEach(s=>{ if(s.ex===oldName) s.ex=newName; });
+  state.workouts.forEach(w=>w.items.forEach(it=>{ if(it.ex===oldName) it.ex=newName; }));
+  if(state.activeWorkout) state.activeWorkout.items.forEach(it=>{ if(it.ex===oldName) it.ex=newName; });
+  state.exMeta[newName]=Object.assign({group:groupOf(oldName)}, state.exMeta[oldName]||{});
+  delete state.exMeta[oldName];
+  if(currentEx===oldName) currentEx=newName;
+  if(progEx===oldName) progEx=newName;
+  if(openEx===oldName) openEx=newName;
+  return true;
+}
+function archiveEx(ex){
+  const st=exStats(ex);
+  if(state.exercises.length<2){ toast("Du behöver minst en övning"); return; }
+  if(!st.sets.length && !st.inWo.length){
+    if(!confirm("Ta bort "+ex+"? Du har inte loggat den än.")) return;
+    state.exercises=state.exercises.filter(e=>e!==ex); delete state.exMeta[ex];
+  } else {
+    const extra = st.inWo.length ? " Den finns kvar i "+st.inWo.join(", ")+"." : "";
+    if(!confirm("Arkivera "+ex+"? Den döljs i listorna men all din historik finns kvar."+extra)) return;
+    state.exercises=state.exercises.filter(e=>e!==ex);
+    if(!state.archived.includes(ex)) state.archived.push(ex);
+  }
+  if(currentEx===ex) currentEx=state.exercises[0];
+  if(progEx===ex) progEx=state.exercises[0];
+  openEx=null; save(); renderAll(); toast(ex+(st.sets.length||st.inWo.length?" arkiverad":" borttagen"));
+}
+function restoreEx(ex){
+  state.archived=state.archived.filter(e=>e!==ex);
+  if(!state.exercises.includes(ex)) state.exercises.push(ex);
+  save(); renderAll(); toast(ex+" är tillbaka");
+}
+function renderExBank(){
+  const gs=$("newExGroup");
+  if(!gs.options.length){ GROUPS.forEach(g=>{ const o=document.createElement("option"); o.value=g; o.textContent=g; gs.appendChild(o); }); }
+  const box=$("exList"); box.innerHTML="";
+  GROUPS.forEach(g=>{
+    const list=state.exercises.filter(e=>groupOf(e)===g); if(!list.length) return;
+    const hd=document.createElement("div"); hd.className="grp-h"; hd.textContent=g; box.appendChild(hd);
+    list.forEach(ex=>{
+      const n=new Set(state.sets.filter(s=>s.ex===ex).map(s=>s.date)).size;
+      const b=document.createElement("button"); b.type="button"; b.className="exbtn";
+      b.innerHTML="<span></span><span></span>";
+      b.children[0].textContent=ex; b.children[1].textContent=n ? n+" pass ›" : "Ny ›";
+      b.onclick=()=>{ openEx=ex; renderExDetail(); const d=$("exDetail"); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth",block:"start"}); };
+      box.appendChild(b);
+    });
+  });
+  const ab=$("archBox"), al=$("archList"); al.innerHTML="";
+  ab.hidden=!state.archived.length;
+  state.archived.forEach(ex=>{
+    const row=document.createElement("div"); row.className="exbtn"; row.style.cursor="default";
+    row.innerHTML="<span></span>"; row.children[0].textContent=ex;
+    const tools=document.createElement("span"); tools.style.display="flex"; tools.style.gap="6px";
+    const v=document.createElement("button"); v.type="button"; v.className="small-btn"; v.textContent="Visa";
+    v.onclick=()=>{ openEx=ex; renderExDetail(); };
+    const r=document.createElement("button"); r.type="button"; r.className="small-btn"; r.textContent="Plocka tillbaka";
+    r.onclick=()=>restoreEx(ex);
+    tools.appendChild(v); tools.appendChild(r); row.appendChild(tools); al.appendChild(row);
+  });
+  renderExDetail();
+}
+function renderExDetail(){
+  const d=$("exDetail");
+  if(!openEx || (!state.exercises.includes(openEx) && !state.archived.includes(openEx))){ d.hidden=true; d.innerHTML=""; return; }
+  const ex=openEx, st=exStats(ex), archived=state.archived.includes(ex);
+  d.hidden=false;
+  d.innerHTML=`
+    <div class="field"><label for="exdName">Namn</label>
+      <div class="row"><input id="exdName" class="plain"><button class="small-btn" id="exdRename">Byt namn</button></div></div>
+    <div class="field" style="margin-top:10px"><label for="exdGroup">Muskelgrupp</label><select id="exdGroup" class="plain"></select></div>
+    <div class="exd-stats">
+      <div class="exd-stat"><b id="exdTop"></b><span>Tyngsta set</span></div>
+      <div class="exd-stat"><b id="exdRm"></b><span>Bästa beräknade max</span></div>
+      <div class="exd-stat"><b id="exdLast"></b><span id="exdLastSub">Senaste passet</span></div>
+      <div class="exd-stat"><b id="exdCount"></b><span>Pass totalt</span></div>
+    </div>
+    <p class="hint" id="exdWo" style="margin:0 2px 12px"></p>
+    <div class="row">
+      <button class="small-btn" id="exdProg" style="flex:1">Visa framsteg</button>
+      <button class="small-btn" id="exdArch" style="flex:1"></button>
+    </div>
+    <button class="small-btn" id="exdClose" style="margin-top:8px;width:100%">Stäng</button>`;
+  $("exdName").value=ex;
+  const gsel=$("exdGroup");
+  GROUPS.forEach(g=>{ const o=document.createElement("option"); o.value=g; o.textContent=g; gsel.appendChild(o); });
+  gsel.value=groupOf(ex);
+  gsel.onchange=()=>{ state.exMeta[ex]=Object.assign({},state.exMeta[ex]||{},{group:gsel.value}); save(); renderAll(); toast(ex+" flyttad till "+gsel.value); };
+  $("exdTop").textContent = st.top ? st.top.reps+" × "+fmt(st.top.kg)+" kg" : "–";
+  $("exdRm").textContent = st.rm ? fmt(st.rm)+" kg" : "–";
+  if(st.lastDate){
+    const t=st.lastSets.reduce((a,b)=>b.kg>a.kg?b:a, st.lastSets[0]);
+    $("exdLast").textContent=shortDate(st.lastDate);
+    $("exdLastSub").textContent="Senast: "+st.lastSets.length+" set, tyngsta "+t.reps+" × "+fmt(t.kg)+" kg";
+  } else { $("exdLast").textContent="–"; }
+  $("exdCount").textContent=String(st.dates.length);
+  $("exdWo").textContent = st.inWo.length ? "Ingår i: "+st.inWo.join(", ")+"." : "Ingår inte i något sparat pass.";
+  $("exdRename").onclick=()=>{ if(renameEx(ex,$("exdName").value)){ save(); renderAll(); toast("Namnet är ändrat"); } };
+  $("exdName").addEventListener("keydown",e=>{ if(e.key==="Enter") $("exdRename").click(); });
+  $("exdProg").onclick=()=>{ progEx=ex; go("v-prog"); renderProgChips(); renderProg(); };
+  const ab=$("exdArch");
+  if(archived){ ab.textContent="Plocka tillbaka"; ab.onclick=()=>restoreEx(ex); }
+  else { ab.textContent = (st.sets.length||st.inWo.length) ? "Arkivera" : "Ta bort"; ab.onclick=()=>archiveEx(ex); }
+  $("exdClose").onclick=()=>{ openEx=null; renderExDetail(); };
 }
 
 function addPlan(){
