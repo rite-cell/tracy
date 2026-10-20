@@ -135,6 +135,25 @@ input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(
 .exman li{display:flex;justify-content:space-between;align-items:center}
 .plan-when{font-weight:800}
 .plan-type{display:block;font-size:14px;color:var(--muted)}
+.wo-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.wo-head small{display:block;font-size:13px;color:var(--muted)}
+.wo-head b{font-size:22px;font-weight:800;letter-spacing:-0.02em}
+.wo-prog{background:var(--lime);color:var(--onLime);border-radius:999px;padding:4px 12px;font-weight:800;white-space:nowrap}
+.wo-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+.wo-item{width:100%;display:flex;align-items:center;gap:10px;text-align:left;border:2px solid var(--line);background:var(--surface);border-radius:14px;padding:10px 12px}
+.wo-item[aria-current="true"]{border-color:var(--grape);background:var(--bg)}
+.wo-item .chk{flex:none;width:26px;height:26px;border-radius:50%;border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:800}
+.wo-item.done .chk{background:var(--lime);border-color:var(--lime);color:var(--onLime)}
+.wo-item.done .wo-name{text-decoration:line-through;opacity:.6}
+.wo-name{flex:1;font-weight:600}
+.wo-target{font-size:14px;color:var(--muted);white-space:nowrap}
+.wo-finish{margin-top:12px}
+.ed-row{display:grid;grid-template-columns:1fr 54px 14px 54px;gap:6px;align-items:center;padding:8px 0;border-top:2px solid var(--line)}
+.ed-row:first-child{border-top:0}
+.ed-row input,.ed-row select{padding:8px 6px;text-align:center}
+.ed-row select{text-align:left}
+.ed-tools{grid-column:1 / -1;display:flex;gap:6px;justify-content:flex-end}
+.ed-tools button{border:2px solid var(--line);background:var(--surface);border-radius:10px;width:40px;height:34px;font-weight:800}
 .acct-msg{font-size:14px;margin:8px 2px 0;min-height:1em}
 .acct-msg.err{color:var(--pink)}
 .small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
@@ -214,6 +233,8 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
   <!-- LOGGA -->
   <section class="view on" id="v-log" aria-label="Logga">
     <div class="sticker" id="next"></div>
+
+    <div id="wo"></div>
 
     <h2>Logga</h2>
     <div class="seg" id="mode" role="group" aria-label="Typ av pass">
@@ -311,7 +332,23 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
 
   <!-- SCHEMA -->
   <section class="view" id="v-plan" aria-label="Schema">
-    <h2 style="margin-top:4px">Planera pass</h2>
+    <h2 style="margin-top:4px">Mina pass</h2>
+    <div class="card" id="woBox">
+      <ul class="wlist" id="woList"></ul>
+      <button class="small-btn" id="newWoBtn" style="margin-top:10px;width:100%">+ Nytt pass</button>
+    </div>
+    <div class="card" id="woEditor" hidden style="margin-top:10px">
+      <div class="field"><label for="woName">Namn på passet</label><input id="woName" class="plain" placeholder="t.ex. Ben-dag"></div>
+      <p class="hint" style="margin:12px 2px 4px">Övningar (set × reps)</p>
+      <div id="woRows"></div>
+      <button class="small-btn" id="woAddRow" style="margin-top:8px;width:100%">+ Lägg till övning</button>
+      <div class="row" style="margin-top:12px">
+        <button class="small-btn" id="woCancel" style="flex:1">Avbryt</button>
+        <button class="small-btn" id="woSave" style="flex:1;background:var(--grape);color:var(--onGrape);border-color:var(--grape)">Spara pass</button>
+      </div>
+    </div>
+
+    <h2>Planera pass</h2>
     <div class="card">
       <div class="row">
         <div class="field"><label for="planDate">Datum</label><input type="date" id="planDate" class="plain"></div>
@@ -432,6 +469,7 @@ let state = {
   sets:[], weights:[],
   activityTypes:["Yoga","Flexcore"], activities:[],
   planned:[],
+  workouts:[], activeWorkout:null,
   schedule:{days:[1,3,5], time:"18:00"}
 };
 let currentEx = state.exercises[0];
@@ -465,6 +503,8 @@ function merge(s){
   if(!Array.isArray(state.activityTypes) || !state.activityTypes.length) state.activityTypes=["Yoga","Flexcore"];
   if(!Array.isArray(state.activities)) state.activities=[];
   if(!Array.isArray(state.planned)) state.planned=[];
+  if(!Array.isArray(state.workouts)) state.workouts=[];
+  if(state.activeWorkout && !Array.isArray(state.activeWorkout.items)) state.activeWorkout=null;
   if(!state.activityTypes.includes(currentAct)) currentAct=state.activityTypes[0];
   if(!state.schedule) state.schedule={days:[],time:"18:00"};
   if(!state.exercises.includes(currentEx)) currentEx=state.exercises[0];
@@ -732,9 +772,152 @@ function addSet(){
   state.sets.push(s);
   state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   save(); renderSession(); renderProg(); renderWeek();
+  const woMsg = woAfterSet();
   if(heavier){ celebrate(pick(LIFT_LINES), "Tyngsta "+currentEx.toLowerCase()+" hittills: "+fmt(kg)+" kg. Det är "+fmt(kg-prevMaxKg)+" kg mer än ditt förra rekord.", "record"); }
   else if(isPr){ toast("Nytt personbästa i "+currentEx.toLowerCase()+"!"); confetti(); }
-  else toast("Set sparat");
+  else toast(woMsg || "Set sparat");
+}
+
+/* ---------- saved workouts ---------- */
+let editingWo = null;
+function woDone(it){
+  const w=state.activeWorkout; if(!w) return 0;
+  return state.sets.filter(s=>s.date===w.date && s.ex===it.ex).length;
+}
+function woNextOpen(){
+  const w=state.activeWorkout; if(!w) return null;
+  return w.items.find(it=>woDone(it)<it.sets) || null;
+}
+function selectWoItem(it, scroll){
+  currentEx=it.ex;
+  if(!state.exercises.includes(it.ex)){ state.exercises.push(it.ex); }
+  setMode("str"); renderExChips(); prefill();
+  $("reps").value=it.reps;
+  renderWorkout();
+  if(scroll){ const el=$("strBox"); if(el && el.scrollIntoView) el.scrollIntoView({behavior:"smooth",block:"center"}); }
+}
+function woAfterSet(){
+  const w=state.activeWorkout; if(!w) return "";
+  const it=w.items.find(x=>x.ex===currentEx);
+  if(!it){ renderWorkout(); return ""; }
+  const done=woDone(it);
+  if(done<it.sets){ renderWorkout(); return "Set "+done+" av "+it.sets+" klart"; }
+  const next=woNextOpen();
+  if(next){ selectWoItem(next,false); return it.ex+" klar! Nästa: "+next.ex; }
+  renderWorkout(); return "Alla övningar klara! Avsluta passet när du är redo.";
+}
+function startWorkout(wo){
+  state.activeWorkout={id:wo.id,name:wo.name,date:$("logDate").value||todayStr(),items:wo.items.map(x=>({ex:x.ex,sets:x.sets,reps:x.reps}))};
+  save();
+  const first=woNextOpen()||state.activeWorkout.items[0];
+  if(first) selectWoItem(first,false); else renderWorkout();
+  toast(wo.name+" startat");
+}
+function finishWorkout(){
+  const w=state.activeWorkout; if(!w) return;
+  const left=w.items.filter(it=>woDone(it)<it.sets).length;
+  if(left && !confirm("Avsluta "+w.name+"? "+left+" övning"+(left>1?"ar":"")+" är inte klar"+(left>1?"a":"")+".")) return;
+  state.activeWorkout=null; save(); renderWorkout(); toast("Passet sparat. Bra jobbat!");
+}
+function renderWorkout(){
+  const box=$("wo"); box.innerHTML="";
+  const w=state.activeWorkout;
+  if(!w){
+    if(!state.workouts.length) return;
+    const h=document.createElement("h2"); h.textContent="Starta ett pass"; box.appendChild(h);
+    const chips=document.createElement("div"); chips.className="chips";
+    state.workouts.forEach(wo=>{
+      const b=document.createElement("button"); b.type="button"; b.className="chip"; b.textContent=wo.name;
+      b.onclick=()=>startWorkout(wo); chips.appendChild(b);
+    });
+    box.appendChild(chips); return;
+  }
+  const doneCount=w.items.filter(it=>woDone(it)>=it.sets).length;
+  const h=document.createElement("h2"); h.textContent="Pågående pass"; box.appendChild(h);
+  const card=document.createElement("div"); card.className="card";
+  card.innerHTML='<div class="wo-head"><div><small></small><b></b></div><span class="wo-prog"></span></div><ol class="wo-list"></ol>';
+  card.querySelector("small").textContent=w.date===todayStr()?"Idag":shortDate(w.date);
+  card.querySelector("b").textContent=w.name;
+  card.querySelector(".wo-prog").textContent=doneCount+" av "+w.items.length+" klara";
+  const ol=card.querySelector("ol");
+  w.items.forEach(it=>{
+    const d=woDone(it), done=d>=it.sets;
+    const li=document.createElement("li");
+    const b=document.createElement("button"); b.type="button"; b.className="wo-item"+(done?" done":"");
+    b.setAttribute("aria-current", it.ex===currentEx && !$("strBox").hidden);
+    b.innerHTML='<span class="chk" aria-hidden="true"></span><span class="wo-name"></span><span class="wo-target"></span>';
+    b.querySelector(".chk").textContent=done?"✓":"";
+    b.querySelector(".wo-name").textContent=it.ex;
+    b.querySelector(".wo-target").textContent=Math.min(d,it.sets)+"/"+it.sets+" set, "+it.reps+" reps";
+    b.onclick=()=>selectWoItem(it,true);
+    li.appendChild(b); ol.appendChild(li);
+  });
+  const fin=document.createElement("button"); fin.type="button"; fin.className="big wo-finish";
+  fin.textContent = doneCount===w.items.length ? "Avsluta passet" : "Avsluta passet tidigare";
+  if(doneCount!==w.items.length){ fin.style.background="var(--surface)"; fin.style.color="var(--ink)"; fin.style.border="2px solid var(--line)"; }
+  fin.onclick=finishWorkout;
+  card.appendChild(fin); box.appendChild(card);
+}
+function renderWoList(){
+  const ul=$("woList"); ul.innerHTML="";
+  if(!state.workouts.length){ ul.innerHTML='<li class="empty" style="justify-content:center">Inga pass sparade än.</li>'; return; }
+  state.workouts.forEach(wo=>{
+    const li=document.createElement("li");
+    const s=document.createElement("span");
+    const n=document.createElement("span"); n.className="plan-when"; n.textContent=wo.name;
+    const t=document.createElement("span"); t.className="plan-type"; t.textContent=wo.items.length+" övning"+(wo.items.length===1?"":"ar");
+    s.appendChild(n); s.appendChild(t);
+    const tools=document.createElement("span"); tools.style.display="flex";
+    const ed=document.createElement("button"); ed.type="button"; ed.textContent="✎"; ed.setAttribute("aria-label","Ändra "+wo.name);
+    ed.onclick=()=>openWoEditor(wo);
+    const del=document.createElement("button"); del.type="button"; del.textContent="✕"; del.setAttribute("aria-label","Ta bort "+wo.name);
+    del.onclick=()=>{ if(!confirm("Ta bort passet "+wo.name+"? Dina loggade set påverkas inte.")) return; state.workouts=state.workouts.filter(x=>x.id!==wo.id); save(); renderAll(); };
+    tools.appendChild(ed); tools.appendChild(del);
+    li.appendChild(s); li.appendChild(tools); ul.appendChild(li);
+  });
+}
+function openWoEditor(wo){
+  editingWo = wo ? {id:wo.id,name:wo.name,items:wo.items.map(x=>({...x}))} : {id:null,name:"",items:[{ex:state.exercises[0],sets:3,reps:8}]};
+  $("woName").value=editingWo.name; $("woEditor").hidden=false; $("newWoBtn").hidden=true;
+  renderWoRows(); $("woName").focus();
+}
+function closeWoEditor(){ editingWo=null; $("woEditor").hidden=true; $("newWoBtn").hidden=false; }
+function renderWoRows(){
+  const box=$("woRows"); box.innerHTML="";
+  editingWo.items.forEach((it,i)=>{
+    const row=document.createElement("div"); row.className="ed-row";
+    const sel=document.createElement("select"); sel.className="plain"; sel.setAttribute("aria-label","Övning "+(i+1));
+    const opts=state.exercises.includes(it.ex)?state.exercises:[it.ex,...state.exercises];
+    opts.forEach(e=>{ const o=document.createElement("option"); o.value=e; o.textContent=e; sel.appendChild(o); });
+    sel.value=it.ex; sel.onchange=()=>{ it.ex=sel.value; };
+    const sets=document.createElement("input"); sets.className="plain"; sets.inputMode="numeric"; sets.value=it.sets; sets.setAttribute("aria-label","Antal set");
+    sets.oninput=()=>{ it.sets=Math.max(1,Math.round(num(sets.value))||1); };
+    const x=document.createElement("span"); x.textContent="×"; x.style.textAlign="center"; x.setAttribute("aria-hidden","true");
+    const reps=document.createElement("input"); reps.className="plain"; reps.inputMode="numeric"; reps.value=it.reps; reps.setAttribute("aria-label","Antal reps");
+    reps.oninput=()=>{ it.reps=Math.max(1,Math.round(num(reps.value))||1); };
+    const tools=document.createElement("div"); tools.className="ed-tools";
+    const mk=(txt,label,fn,dis)=>{ const b=document.createElement("button"); b.type="button"; b.textContent=txt; b.setAttribute("aria-label",label); b.disabled=!!dis; if(dis) b.style.opacity=.35; b.onclick=fn; tools.appendChild(b); };
+    mk("↑","Flytta upp",()=>{ editingWo.items.splice(i-1,0,editingWo.items.splice(i,1)[0]); renderWoRows(); }, i===0);
+    mk("↓","Flytta ner",()=>{ editingWo.items.splice(i+1,0,editingWo.items.splice(i,1)[0]); renderWoRows(); }, i===editingWo.items.length-1);
+    mk("✕","Ta bort övningen",()=>{ editingWo.items.splice(i,1); renderWoRows(); });
+    row.appendChild(sel); row.appendChild(sets); row.appendChild(x); row.appendChild(reps); row.appendChild(tools);
+    box.appendChild(row);
+  });
+  if(!editingWo.items.length){ box.innerHTML='<p class="empty">Lägg till minst en övning.</p>'; }
+}
+function saveWo(){
+  const name=$("woName").value.trim();
+  if(!name){ toast("Ge passet ett namn"); return; }
+  if(!editingWo.items.length){ toast("Lägg till minst en övning"); return; }
+  if(state.workouts.some(w=>w.name.toLowerCase()===name.toLowerCase() && w.id!==editingWo.id)){ toast("Det finns redan ett pass med det namnet"); return; }
+  const wo={id:editingWo.id||uid(),name,items:editingWo.items.map(x=>({ex:x.ex,sets:x.sets,reps:x.reps}))};
+  const i=state.workouts.findIndex(w=>w.id===wo.id);
+  if(i>=0){
+    const old=state.workouts[i].name;
+    state.workouts[i]=wo;
+    state.planned.forEach(p=>{ if(p.type===old) p.type=name; });
+  } else state.workouts.push(wo);
+  save(); closeWoEditor(); renderAll(); toast(name+" sparat");
 }
 
 /* ---------- other sessions ---------- */
@@ -759,6 +942,7 @@ function addAct(){
   save(); renderSession(); renderWeek(); toast(currentAct+" sparat");
 }
 function setMode(m){
+  setTimeout(renderWorkout,0);
   document.querySelectorAll("#mode button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.mode===m));
   $("strBox").hidden = m!=="str"; $("actBox").hidden = m!=="act";
 }
@@ -909,7 +1093,7 @@ function drawLine(which, labels, series, emptyMsg){
 /* ---------- plan ---------- */
 function renderPlan(){
   const sel=$("planType"); const prev=sel.value; sel.innerHTML="";
-  ["Styrka",...state.activityTypes].forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); });
+  ["Styrka",...state.workouts.map(w=>w.name),...state.activityTypes].forEach(t=>{ const o=document.createElement("option"); o.value=t; o.textContent=t; sel.appendChild(o); });
   if(prev && [...sel.options].some(o=>o.value===prev)) sel.value=prev;
   const pl=$("planList"); pl.innerHTML="";
   const list=upcoming();
@@ -985,7 +1169,7 @@ function go(v){
   if(v==="v-prog"){ renderWeek(); renderProg(); }
   if(v==="v-body") renderBw();
 }
-function renderAll(){ renderNext(); renderExChips(); renderActChips(); renderWeek(); prefill(); renderSession(); renderProgChips(); renderProg(); renderBw(); renderPlan(); }
+function renderAll(){ renderWorkout(); renderWoList(); renderNext(); renderExChips(); renderActChips(); renderWeek(); prefill(); renderSession(); renderProgChips(); renderProg(); renderBw(); renderPlan(); }
 
 /* ---------- events ---------- */
 document.querySelectorAll("nav.tabs button").forEach(b=> b.onclick=()=>go(b.dataset.v));
@@ -999,6 +1183,10 @@ document.querySelectorAll("#metric button").forEach(b=> b.onclick=()=>{
   metric=b.dataset.m; document.querySelectorAll("#metric button").forEach(x=>x.setAttribute("aria-pressed", x===b)); renderProg();
 });
 $("addSet").onclick=addSet;
+$("newWoBtn").onclick=()=>openWoEditor(null);
+$("woAddRow").onclick=()=>{ const last=editingWo.items[editingWo.items.length-1]; editingWo.items.push({ex:state.exercises[0],sets:last?last.sets:3,reps:last?last.reps:8}); renderWoRows(); };
+$("woCancel").onclick=closeWoEditor;
+$("woSave").onclick=saveWo;
 $("partyClose").onclick=closeParty;
 $("partySnd").onclick=(e)=>{
   e.stopPropagation();
