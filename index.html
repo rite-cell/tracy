@@ -40,6 +40,19 @@
   --grape:#8B6BFF; --line:#3A2F6B; --onGrape:#FFFFFF;
 }
 *,*::before,*::after{box-sizing:inherit}
+[hidden]{display:none !important}
+.plain{min-width:0;max-width:100%}
+input[type="date"].plain,input[type="time"].plain{-webkit-appearance:none;appearance:none;display:block;width:100%;min-height:48px;font-size:16px;padding:10px 8px;text-align:left}
+input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left}
+.small-btn{white-space:nowrap}
+.row > .small-btn:not([style*="flex"]){flex:none}
+.seg button{white-space:nowrap;font-size:13px}
+.stats{grid-template-columns:repeat(3,minmax(0,1fr)) !important}
+.stat{padding:10px !important;min-width:0}
+.stat b{font-size:clamp(15px,4.6vw,24px);overflow-wrap:anywhere}
+.exbtn span:last-child{white-space:normal !important;text-align:right;max-width:55%}
+.wrap{overflow-x:clip}
+.dateline input[type="date"].plain{width:auto;flex:0 1 190px}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{
   margin:0; background:var(--bg); color:var(--ink);
@@ -87,7 +100,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:26px 0 10px}
 .row{display:flex;gap:10px;align-items:stretch}
 .field{flex:1;min-width:0}
 .field label{display:block;font-size:14px;color:var(--muted);margin:0 0 4px 4px}
-.stepper{display:flex;align-items:center;background:var(--bg);border-radius:16px;padding:4px}
+.stepper{display:flex;align-items:center;background:var(--bg);border-radius:16px;padding:4px;min-height:52px}
 .stepper button{width:44px;height:44px;border:0;border-radius:12px;background:var(--surface);font-size:22px;font-weight:600;flex:none}
 .stepper input{width:100%;min-width:0;border:0;background:transparent;text-align:center;font-size:26px;font-weight:800;padding:0}
 .stepper input:focus{outline:none}
