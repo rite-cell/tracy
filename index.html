@@ -259,7 +259,7 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
       <div id="strBox">
       <div class="chips" id="exChips" role="group" aria-label="Välj övning"></div>
       <p class="hint" id="lastHint"></p>
-      <div class="row">
+      <div class="row" id="repsRow">
         <div class="field">
           <label for="reps">Reps</label>
           <div class="stepper">
@@ -274,6 +274,22 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
             <button type="button" data-step="kg" data-d="-2.5" aria-label="Minska vikt">−</button>
             <input id="kg" inputmode="decimal" value="20" aria-label="Vikt i kilo">
             <button type="button" data-step="kg" data-d="2.5" aria-label="Öka vikt">+</button>
+          </div>
+        </div>
+      </div>
+      <div class="row" id="timeRow" hidden>
+        <div class="field">
+          <label for="tmin">Tid (min)</label>
+          <div class="stepper">
+            <button type="button" data-step="tmin" data-d="-1" aria-label="Minska tid">−</button>
+            <input id="tmin" inputmode="decimal" value="10" aria-label="Tid i minuter">
+            <button type="button" data-step="tmin" data-d="1" aria-label="Öka tid">+</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="tkm">Distans (km)</label>
+          <div class="stepper">
+            <input id="tkm" inputmode="decimal" placeholder="valfritt" aria-label="Distans i kilometer" style="font-size:20px">
           </div>
         </div>
       </div>
@@ -383,11 +399,17 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
     <h2>Övningsbank</h2>
     <div class="card" id="exDetail" hidden style="margin-bottom:10px"></div>
     <div class="card">
-      <div class="row">
-        <input id="newEx" class="plain" placeholder="Ny övning, t.ex. Chins" style="flex:2">
+      <input id="newEx" class="plain" placeholder="Ny övning, t.ex. Chins">
+      <div class="row" style="margin-top:8px">
         <select id="newExGroup" class="plain" style="flex:1" aria-label="Muskelgrupp"></select>
+        <select id="newExEquip" class="plain" style="flex:1" aria-label="Redskap"></select>
+      </div>
+      <div class="seg" id="newExKind" role="group" aria-label="Hur övningen loggas" style="margin:8px 0 0">
+        <button type="button" aria-pressed="true" data-k="reps">Reps och vikt</button>
+        <button type="button" aria-pressed="false" data-k="time">Tid</button>
       </div>
       <button class="small-btn" id="addEx" style="margin-top:8px;width:100%">Lägg till övning</button>
+      <select id="equipFilter" class="plain" aria-label="Filtrera på redskap" style="margin-top:14px"></select>
       <div id="exList" style="margin-top:12px"></div>
       <details class="arch" id="archBox" hidden><summary>Arkiverade övningar</summary><div id="archList"></div></details>
     </div>
@@ -488,7 +510,7 @@ let state = {
 };
 let currentEx = state.exercises[0];
 let progEx = state.exercises[0];
-let metric = "kg";
+let metric = 0;
 const SB_URL = "https://lbsqgrvxmtyjisnmomwx.supabase.co";
 const SB_KEY = "sb_publishable_SX2JXHZsOtU9MJTGDdNPTw_H5ChbseI";
 let sb = null, sbUser = null, pushTimer = null, pending = false, syncing = false, lastSync = 0;
@@ -685,8 +707,16 @@ function celebrate(title, text, clip){
 }
 function closeParty(){ $("party").classList.remove("show"); try{ $("partyVid").pause(); }catch(e){} }
 function css(v){ return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function isTimeSet(s){ return s && s.min!=null; }
+function kindOf(ex){ const m=state.exMeta && state.exMeta[ex]; return (m && m.kind)==="time" ? "time" : "reps"; }
+function fmtTime(s){ return fmt(s.min)+" min"+(s.km?", "+fmt(s.km)+" km":""); }
 function bestRm(ex, excludeId){
-  let b=0; state.sets.forEach(s=>{ if(s.ex===ex && s.id!==excludeId){ b=Math.max(b,est1rm(s.kg,s.reps)); } }); return b;
+  let b=0; state.sets.forEach(s=>{ if(s.ex===ex && s.id!==excludeId && !isTimeSet(s)){ b=Math.max(b,est1rm(s.kg,s.reps)); } }); return b;
+}
+function updateLogFields(){
+  const t=kindOf(currentEx)==="time";
+  $("repsRow").hidden=t; $("timeRow").hidden=!t;
+  $("addSet").textContent = t ? "Spara" : "Lägg till set";
 }
 
 /* ---------- next session ---------- */
@@ -728,8 +758,17 @@ function renderExChips(){
   box.appendChild(add);
 }
 function prefill(){
-  const list=state.sets.filter(s=>s.ex===currentEx);
+  updateLogFields();
   const hint=$("lastHint");
+  if(kindOf(currentEx)==="time"){
+    const tl=state.sets.filter(s=>s.ex===currentEx && isTimeSet(s));
+    if(!tl.length){ hint.textContent="Första gången du loggar "+currentEx.toLowerCase()+". Fyll i tid, och distans om du vill."; return; }
+    const lt=tl[tl.length-1];
+    hint.textContent="Förra gången ("+shortDate(lt.date)+"): "+fmtTime(lt)+".";
+    $("tmin").value=String(lt.min).replace(".",","); $("tkm").value=lt.km?String(lt.km).replace(".",","):"";
+    return;
+  }
+  const list=state.sets.filter(s=>s.ex===currentEx && !isTimeSet(s));
   if(!list.length){ hint.textContent="Första gången du loggar "+currentEx.toLowerCase()+". Välj reps och vikt nedan."; return; }
   const last=list[list.length-1];
   const lastDate=last.date;
@@ -766,9 +805,9 @@ function renderSession(){
     const l=document.createElement("div"); l.className="setlist";
     sets.filter(s=>s.ex===ex).forEach(s=>{
       const chip=document.createElement("span"); chip.className="set"+(s.pr?" pr":"");
-      chip.appendChild(document.createTextNode(s.reps+" × "+fmt(s.kg)+" kg"));
+      chip.appendChild(document.createTextNode(isTimeSet(s) ? fmtTime(s) : s.reps+" × "+fmt(s.kg)+" kg"));
       const del=document.createElement("button"); del.type="button"; del.textContent="✕";
-      del.setAttribute("aria-label","Ta bort set "+s.reps+" gånger "+fmt(s.kg)+" kilo");
+      del.setAttribute("aria-label","Ta bort "+(isTimeSet(s) ? fmtTime(s) : "set "+s.reps+" gånger "+fmt(s.kg)+" kilo"));
       del.onclick=()=>{ state.sets=state.sets.filter(x=>x.id!==s.id); save(); renderSession(); renderProg(); toast("Set borttaget"); };
       chip.appendChild(del); l.appendChild(chip);
     });
@@ -776,13 +815,25 @@ function renderSession(){
   });
 }
 function addSet(){
+  if(kindOf(currentEx)==="time"){
+    const min=num($("tmin").value), km=num($("tkm").value);
+    if(!(min>0)){ toast("Fyll i hur många minuter"); return; }
+    const ts={id:uid(),date:$("logDate").value||todayStr(),ex:currentEx,min};
+    if(km>0) ts.km=km;
+    state.sets.push(ts);
+    state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
+    save(); renderSession(); renderProg(); renderWeek();
+    const wm=woAfterSet();
+    toast(wm || currentEx+" sparad: "+fmtTime(ts));
+    return;
+  }
   const reps=Math.round(num($("reps").value)); const kg=num($("kg").value);
   if(!(reps>0)){ toast("Fyll i antal reps"); return; }
   if(!(kg>=0)){ toast("Fyll i en vikt"); return; }
   const date=$("logDate").value||todayStr();
   const prevBest=bestRm(currentEx);
   const isPr = prevBest>0 && est1rm(kg,reps)>prevBest+0.01;
-  const prevMaxKg=state.sets.filter(x=>x.ex===currentEx).reduce((m,x)=>Math.max(m,x.kg),0);
+  const prevMaxKg=state.sets.filter(x=>x.ex===currentEx && !isTimeSet(x)).reduce((m,x)=>Math.max(m,x.kg),0);
   const heavier = prevMaxKg>0 && kg>prevMaxKg;
   const s={id:uid(),date,ex:currentEx,reps,kg,pr:isPr||heavier};
   state.sets.push(s);
@@ -807,7 +858,7 @@ function woNextOpen(){
 function selectWoItem(it, scroll){
   currentEx=it.ex;
   setMode("str"); renderExChips(); prefill();
-  $("reps").value=it.reps;
+  if(kindOf(it.ex)==="time") $("tmin").value=it.reps; else $("reps").value=it.reps;
   renderWorkout();
   if(scroll){ const el=$("strBox"); if(el && el.scrollIntoView) el.scrollIntoView({behavior:"smooth",block:"center"}); }
 }
@@ -863,7 +914,7 @@ function renderWorkout(){
     b.innerHTML='<span class="chk" aria-hidden="true"></span><span class="wo-name"></span><span class="wo-target"></span>';
     b.querySelector(".chk").textContent=done?"✓":"";
     b.querySelector(".wo-name").textContent=it.ex;
-    b.querySelector(".wo-target").textContent=Math.min(d,it.sets)+"/"+it.sets+" set, "+it.reps+" reps";
+    b.querySelector(".wo-target").textContent=Math.min(d,it.sets)+"/"+it.sets+" set, "+it.reps+(kindOf(it.ex)==="time"?" min":" reps");
     b.onclick=()=>selectWoItem(it,true);
     li.appendChild(b); ol.appendChild(li);
   });
@@ -909,13 +960,15 @@ function renderWoRows(){
       list.forEach(e=>{ const o=document.createElement("option"); o.value=e; o.textContent=e; og.appendChild(o); });
       sel.appendChild(og);
     });
-    sel.value=it.ex; sel.onchange=()=>{ it.ex=sel.value; };
+    sel.value=it.ex; sel.onchange=()=>{ const was=kindOf(it.ex); it.ex=sel.value; if(kindOf(it.ex)!==was){ if(kindOf(it.ex)==="time"){ it.sets=1; it.reps=10; } else { it.sets=3; it.reps=8; } } renderWoRows(); };
     const sets=document.createElement("input"); sets.className="plain"; sets.inputMode="numeric"; sets.value=it.sets; sets.setAttribute("aria-label","Antal set");
     sets.oninput=()=>{ it.sets=Math.max(1,Math.round(num(sets.value))||1); };
     const x=document.createElement("span"); x.textContent="×"; x.style.textAlign="center"; x.setAttribute("aria-hidden","true");
-    const reps=document.createElement("input"); reps.className="plain"; reps.inputMode="numeric"; reps.value=it.reps; reps.setAttribute("aria-label","Antal reps");
+    const isT=kindOf(it.ex)==="time";
+    const reps=document.createElement("input"); reps.className="plain"; reps.inputMode="numeric"; reps.value=it.reps; reps.setAttribute("aria-label", isT?"Minuter":"Antal reps");
     reps.oninput=()=>{ it.reps=Math.max(1,Math.round(num(reps.value))||1); };
     const tools=document.createElement("div"); tools.className="ed-tools";
+    const unit=document.createElement("span"); unit.textContent=isT?"set × minuter":"set × reps"; unit.style.cssText="margin-right:auto;align-self:center;font-size:13px;color:var(--muted)"; tools.appendChild(unit);
     const mk=(txt,label,fn,dis)=>{ const b=document.createElement("button"); b.type="button"; b.textContent=txt; b.setAttribute("aria-label",label); b.disabled=!!dis; if(dis) b.style.opacity=.35; b.onclick=fn; tools.appendChild(b); };
     mk("↑","Flytta upp",()=>{ editingWo.items.splice(i-1,0,editingWo.items.splice(i,1)[0]); renderWoRows(); }, i===0);
     mk("↓","Flytta ner",()=>{ editingWo.items.splice(i+1,0,editingWo.items.splice(i,1)[0]); renderWoRows(); }, i===editingWo.items.length-1);
@@ -1014,16 +1067,24 @@ function renderProgChips(){
 }
 function sessionsFor(ex){
   const by={};
-  state.sets.filter(s=>s.ex===ex).forEach(s=>{
-    const d=by[s.date]||(by[s.date]={kg:0,rm:0,vol:0});
-    d.kg=Math.max(d.kg,s.kg); d.rm=Math.max(d.rm,est1rm(s.kg,s.reps)); d.vol+=s.kg*s.reps;
+  const t=kindOf(ex)==="time";
+  state.sets.filter(s=>s.ex===ex && isTimeSet(s)===t).forEach(s=>{
+    const d=by[s.date]||(by[s.date]={kg:0,rm:0,vol:0,min:0,km:0,tot:0});
+    if(t){ d.min=Math.max(d.min,s.min); d.km=Math.max(d.km,s.km||0); d.tot+=s.min; }
+    else { d.kg=Math.max(d.kg,s.kg); d.rm=Math.max(d.rm,est1rm(s.kg,s.reps)); d.vol+=s.kg*s.reps; }
   });
   return Object.keys(by).sort().map(date=>({date,...by[date]}));
 }
 function renderProg(){
-  const ses=sessionsFor(progEx);
-  const vals=ses.map(s=>s[metric]);
-  const unit = "kg";
+  const t=kindOf(progEx)==="time";
+  const keys=t?["min","km","tot"]:["kg","rm","vol"];
+  const labels=t?["Längsta tid","Distans","Total tid"]:["Tyngsta set","Beräknat max","Volym"];
+  document.querySelectorAll("#metric button").forEach((b,i)=>{ b.textContent=labels[i]; });
+  let ses=sessionsFor(progEx);
+  const key=keys[metric]||keys[0];
+  if(key==="km") ses=ses.filter(s=>s.km>0);
+  const vals=ses.map(s=>s[key]);
+  const unit = key==="km" ? "km" : t ? "min" : "kg";
   const st=$("progStats");
   if(!ses.length){
     st.innerHTML='<div class="stat"><b>–</b><span>Första</span></div><div class="stat"><b>–</b><span>Bästa</span></div><div class="stat"><b>–</b><span>Ökning</span></div>';
@@ -1144,7 +1205,12 @@ function renderPlan(){
   });
   renderExBank();
 }
-const GROUPS=["Ben","Bröst","Rygg","Axlar","Armar","Mage","Helkropp","Övrigt"];
+const GROUPS=["Ben","Bröst","Rygg","Axlar","Armar","Mage","Helkropp","Kondition","Övrigt"];
+const EQUIP=["Skivstång","Hantlar","Smithmaskin","Kabel","Maskin","Kettlebell","Kroppsvikt","Konditionsmaskin","Övrigt"];
+const DEFAULT_EQUIP={"Knäböj":"Skivstång","Bänkpress":"Skivstång","Marklyft":"Skivstång","Militärpress":"Skivstång","Rodd":"Skivstång"};
+let equipFilter="", newKind="reps";
+function equipOf(ex){ const m=state.exMeta[ex]; return (m && m.equip) || DEFAULT_EQUIP[ex] || "Övrigt"; }
+function fillSelect(sel, list, first){ if(sel.options.length) return; if(first){ const o=document.createElement("option"); o.value=""; o.textContent=first; sel.appendChild(o); } list.forEach(v=>{ const o=document.createElement("option"); o.value=v; o.textContent=v; sel.appendChild(o); }); }
 const DEFAULT_GROUP={"Knäböj":"Ben","Bänkpress":"Bröst","Marklyft":"Rygg","Militärpress":"Axlar","Rodd":"Rygg"};
 let openEx=null;
 function groupOf(ex){ const m=state.exMeta[ex]; return (m && m.group) || DEFAULT_GROUP[ex] || "Övrigt"; }
@@ -1153,11 +1219,15 @@ function exStats(ex){
   const sets=state.sets.filter(s=>s.ex===ex);
   const dates=[...new Set(sets.map(s=>s.date))].sort();
   let top=null, rm=0;
-  sets.forEach(s=>{ if(!top || s.kg>top.kg || (s.kg===top.kg && s.reps>top.reps)) top=s; rm=Math.max(rm,est1rm(s.kg,s.reps)); });
+  let maxMin=0, maxKm=0, totMin=0;
+  sets.forEach(s=>{
+    if(isTimeSet(s)){ maxMin=Math.max(maxMin,s.min); maxKm=Math.max(maxKm,s.km||0); totMin+=s.min; return; }
+    if(!top || s.kg>top.kg || (s.kg===top.kg && s.reps>top.reps)) top=s; rm=Math.max(rm,est1rm(s.kg,s.reps));
+  });
   const lastDate=dates[dates.length-1]||null;
   const lastSets=lastDate?sets.filter(s=>s.date===lastDate):[];
   const inWo=state.workouts.filter(w=>w.items.some(it=>it.ex===ex)).map(w=>w.name);
-  return {sets,dates,top,rm,lastDate,lastSets,inWo};
+  return {sets,dates,top,rm,lastDate,lastSets,inWo,maxMin,maxKm,totMin};
 }
 function addEx(){
   const name=$("newEx").value.trim();
@@ -1165,7 +1235,7 @@ function addEx(){
   const arch=state.archived.find(e=>e.toLowerCase()===name.toLowerCase());
   if(arch){ if(confirm(arch+" finns bland dina arkiverade övningar. Vill du plocka tillbaka den?")) restoreEx(arch); return; }
   if(state.exercises.some(e=>e.toLowerCase()===name.toLowerCase())){ toast("Den övningen finns redan"); return; }
-  state.exercises.push(name); state.exMeta[name]={group:$("newExGroup").value};
+  state.exercises.push(name); state.exMeta[name]={group:$("newExGroup").value, equip:$("newExEquip").value, kind:newKind};
   currentEx=name; $("newEx").value=""; save(); renderAll(); toast(name+" tillagd");
 }
 function renameEx(oldName, newName){
@@ -1210,19 +1280,23 @@ function restoreEx(ex){
 function renderExBank(){
   const gs=$("newExGroup");
   if(!gs.options.length){ GROUPS.forEach(g=>{ const o=document.createElement("option"); o.value=g; o.textContent=g; gs.appendChild(o); }); }
+  fillSelect($("newExEquip"), EQUIP);
+  fillSelect($("equipFilter"), EQUIP, "Alla redskap");
+  $("equipFilter").value=equipFilter;
   const box=$("exList"); box.innerHTML="";
   GROUPS.forEach(g=>{
-    const list=state.exercises.filter(e=>groupOf(e)===g); if(!list.length) return;
+    const list=state.exercises.filter(e=>groupOf(e)===g && (!equipFilter || equipOf(e)===equipFilter)); if(!list.length) return;
     const hd=document.createElement("div"); hd.className="grp-h"; hd.textContent=g; box.appendChild(hd);
     list.forEach(ex=>{
       const n=new Set(state.sets.filter(s=>s.ex===ex).map(s=>s.date)).size;
       const b=document.createElement("button"); b.type="button"; b.className="exbtn";
       b.innerHTML="<span></span><span></span>";
-      b.children[0].textContent=ex; b.children[1].textContent=n ? n+" pass ›" : "Ny ›";
+      b.children[0].textContent=ex; b.children[1].textContent=equipOf(ex)+(kindOf(ex)==="time"?", tid":"")+", "+(n ? n+" pass ›" : "ny ›");
       b.onclick=()=>{ openEx=ex; renderExDetail(); const d=$("exDetail"); if(d.scrollIntoView) d.scrollIntoView({behavior:"smooth",block:"start"}); };
       box.appendChild(b);
     });
   });
+  if(!box.children.length){ box.innerHTML='<p class="empty">Inga övningar med det redskapet.</p>'; }
   const ab=$("archBox"), al=$("archList"); al.innerHTML="";
   ab.hidden=!state.archived.length;
   state.archived.forEach(ex=>{
@@ -1245,10 +1319,14 @@ function renderExDetail(){
   d.innerHTML=`
     <div class="field"><label for="exdName">Namn</label>
       <div class="row"><input id="exdName" class="plain"><button class="small-btn" id="exdRename">Byt namn</button></div></div>
-    <div class="field" style="margin-top:10px"><label for="exdGroup">Muskelgrupp</label><select id="exdGroup" class="plain"></select></div>
+    <div class="row" style="margin-top:10px">
+      <div class="field"><label for="exdGroup">Muskelgrupp</label><select id="exdGroup" class="plain"></select></div>
+      <div class="field"><label for="exdEquip">Redskap</label><select id="exdEquip" class="plain"></select></div>
+    </div>
+    <div class="field" style="margin-top:10px"><label for="exdKind">Loggas som</label><select id="exdKind" class="plain"><option value="reps">Reps och vikt</option><option value="time">Tid</option></select></div>
     <div class="exd-stats">
-      <div class="exd-stat"><b id="exdTop"></b><span>Tyngsta set</span></div>
-      <div class="exd-stat"><b id="exdRm"></b><span>Bästa beräknade max</span></div>
+      <div class="exd-stat"><b id="exdTop"></b><span id="exdTopL">Tyngsta set</span></div>
+      <div class="exd-stat"><b id="exdRm"></b><span id="exdRmL">Bästa beräknade max</span></div>
       <div class="exd-stat"><b id="exdLast"></b><span id="exdLastSub">Senaste passet</span></div>
       <div class="exd-stat"><b id="exdCount"></b><span>Pass totalt</span></div>
     </div>
@@ -1263,12 +1341,27 @@ function renderExDetail(){
   GROUPS.forEach(g=>{ const o=document.createElement("option"); o.value=g; o.textContent=g; gsel.appendChild(o); });
   gsel.value=groupOf(ex);
   gsel.onchange=()=>{ state.exMeta[ex]=Object.assign({},state.exMeta[ex]||{},{group:gsel.value}); save(); renderAll(); toast(ex+" flyttad till "+gsel.value); };
-  $("exdTop").textContent = st.top ? st.top.reps+" × "+fmt(st.top.kg)+" kg" : "–";
-  $("exdRm").textContent = st.rm ? fmt(st.rm)+" kg" : "–";
+  const esel=$("exdEquip"); fillSelect(esel, EQUIP); esel.value=equipOf(ex);
+  esel.onchange=()=>{ state.exMeta[ex]=Object.assign({},state.exMeta[ex]||{},{equip:esel.value}); save(); renderAll(); toast("Redskap: "+esel.value); };
+  const ksel=$("exdKind"); ksel.value=kindOf(ex);
+  ksel.onchange=()=>{
+    const hasOther=st.sets.some(s=>isTimeSet(s)!==(ksel.value==="time"));
+    if(hasOther && !confirm("Du har redan loggat "+ex+" på det andra sättet. De gamla loggarna finns kvar men syns inte i kurvan för det nya sättet. Byta ändå?")){ ksel.value=kindOf(ex); return; }
+    state.exMeta[ex]=Object.assign({},state.exMeta[ex]||{},{kind:ksel.value}); save(); renderAll(); toast(ex+" loggas nu som "+(ksel.value==="time"?"tid":"reps och vikt"));
+  };
+  if(kindOf(ex)==="time"){
+    $("exdTopL").textContent="Längsta tid"; $("exdRmL").textContent="Längsta distans";
+    $("exdTop").textContent = st.maxMin ? fmt(st.maxMin)+" min" : "–";
+    $("exdRm").textContent = st.maxKm ? fmt(st.maxKm)+" km" : "–";
+  } else {
+    $("exdTop").textContent = st.top ? st.top.reps+" × "+fmt(st.top.kg)+" kg" : "–";
+    $("exdRm").textContent = st.rm ? fmt(st.rm)+" kg" : "–";
+  }
   if(st.lastDate){
-    const t=st.lastSets.reduce((a,b)=>b.kg>a.kg?b:a, st.lastSets[0]);
     $("exdLast").textContent=shortDate(st.lastDate);
-    $("exdLastSub").textContent="Senast: "+st.lastSets.length+" set, tyngsta "+t.reps+" × "+fmt(t.kg)+" kg";
+    const ts=st.lastSets.filter(isTimeSet), rs=st.lastSets.filter(s=>!isTimeSet(s));
+    if(ts.length && (kindOf(ex)==="time" || !rs.length)){ $("exdLastSub").textContent="Senast: "+ts.map(fmtTime).join(" + "); }
+    else if(rs.length){ const t=rs.reduce((a,b)=>b.kg>a.kg?b:a, rs[0]); $("exdLastSub").textContent="Senast: "+rs.length+" set, tyngsta "+t.reps+" × "+fmt(t.kg)+" kg"; }
   } else { $("exdLast").textContent="–"; }
   $("exdCount").textContent=String(st.dates.length);
   $("exdWo").textContent = st.inWo.length ? "Ingår i: "+st.inWo.join(", ")+"." : "Ingår inte i något sparat pass.";
@@ -1315,11 +1408,13 @@ document.querySelectorAll("[data-step]").forEach(b=> b.onclick=()=>{
   let v=num(inp.value); if(!isFinite(v)) v=0; v=Math.max(0, Math.round((v+d)*10)/10);
   inp.value=String(v).replace(".",",");
 });
-document.querySelectorAll("#metric button").forEach(b=> b.onclick=()=>{
-  metric=b.dataset.m; document.querySelectorAll("#metric button").forEach(x=>x.setAttribute("aria-pressed", x===b)); renderProg();
+document.querySelectorAll("#metric button").forEach((b,i)=> b.onclick=()=>{
+  metric=i; document.querySelectorAll("#metric button").forEach(x=>x.setAttribute("aria-pressed", x===b)); renderProg();
 });
 $("addSet").onclick=addSet;
 $("newWoBtn").onclick=()=>openWoEditor(null);
+$("equipFilter").onchange=e=>{ equipFilter=e.target.value; renderExBank(); };
+document.querySelectorAll("#newExKind button").forEach(b=> b.onclick=()=>{ newKind=b.dataset.k; document.querySelectorAll("#newExKind button").forEach(x=>x.setAttribute("aria-pressed", x===b)); });
 $("woAddRow").onclick=()=>{ const last=editingWo.items[editingWo.items.length-1]; editingWo.items.push({ex:state.exercises[0],sets:last?last.sets:3,reps:last?last.reps:8}); renderWoRows(); };
 $("woCancel").onclick=closeWoEditor;
 $("woSave").onclick=saveWo;
