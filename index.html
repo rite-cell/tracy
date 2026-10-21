@@ -892,7 +892,7 @@ function addSet(){
     if(!(min>0)){ toast("Fyll i hur många minuter"); return; }
     const ts={id:uid(),date:$("logDate").value||todayStr(),ex:currentEx,min};
     if(km>0) ts.km=km;
-    state.sets.push(ts);
+    state.sets.push(ts); woTrack(ts);
     state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
     save(); renderSession(); renderProg(); renderWeek();
     const wm=woAfterSet();
@@ -908,7 +908,7 @@ function addSet(){
   const prevMaxKg=state.sets.filter(x=>x.ex===currentEx && !isTimeSet(x)).reduce((m,x)=>Math.max(m,x.kg),0);
   const heavier = prevMaxKg>0 && kg>prevMaxKg;
   const s={id:uid(),date,ex:currentEx,reps,kg,pr:isPr||heavier};
-  state.sets.push(s);
+  state.sets.push(s); woTrack(s);
   state.sets.sort((a,b)=> a.date<b.date?-1:a.date>b.date?1:0);
   save(); renderSession(); renderProg(); renderWeek();
   const woMsg = woAfterSet();
@@ -936,6 +936,27 @@ function updateFocus(){
 function woDone(it){
   const w=state.activeWorkout; if(!w) return 0;
   return state.sets.filter(s=>s.date===w.date && s.ex===it.ex).length;
+}
+function woTrack(s){
+  const w=state.activeWorkout; if(!w) return;
+  if(!Array.isArray(w.setIds)) w.setIds=[];
+  w.setIds.push(s.id);
+}
+function woLoggedIds(){
+  const w=state.activeWorkout; if(!w || !Array.isArray(w.setIds)) return [];
+  const ids=new Set(state.sets.map(s=>s.id));
+  return w.setIds.filter(id=>ids.has(id));
+}
+function cancelWorkout(){
+  const w=state.activeWorkout; if(!w) return;
+  const ids=woLoggedIds();
+  if(ids.length){
+    if(!confirm("Avbryta "+w.name+"? "+(ids.length===1?"Det set":"De "+ids.length+" set")+" du loggat under passet tas bort.")) return;
+    const del=new Set(ids); state.sets=state.sets.filter(s=>!del.has(s.id));
+  }
+  state.activeWorkout=null; freeLog=false; save();
+  renderSession(); renderProg(); renderWeek(); renderWorkout(); prefill();
+  toast(w.name+" avbrutet. Inget sparades.");
 }
 function woNextOpen(){
   const w=state.activeWorkout; if(!w) return null;
@@ -1009,7 +1030,21 @@ function renderWorkout(){
   fin.textContent = doneCount===w.items.length ? "Avsluta passet" : "Avsluta passet tidigare";
   if(doneCount!==w.items.length){ fin.style.background="var(--surface)"; fin.style.color="var(--ink)"; fin.style.border="2px solid var(--line)"; }
   fin.onclick=finishWorkout;
-  card.appendChild(fin); box.appendChild(card);
+  const logged=woLoggedIds().length;
+  if(!logged){
+    fin.textContent="Avbryt passet";
+    fin.onclick=cancelWorkout;
+    card.appendChild(fin);
+    const note=document.createElement("p"); note.className="hint"; note.style.cssText="margin:8px 2px 0;text-align:center";
+    note.textContent="Du har inte loggat något än, så inget sparas om du avbryter.";
+    card.appendChild(note);
+  } else {
+    card.appendChild(fin);
+    const c=document.createElement("button"); c.type="button"; c.className="linkbtn"; c.style.cssText="display:block;margin:10px auto 0;color:var(--pink)";
+    c.textContent="Avbryt och ta bort "+(logged===1?"1 loggat set":logged+" loggade set");
+    c.onclick=cancelWorkout; card.appendChild(c);
+  }
+  box.appendChild(card);
 }
 function renderWoList(){
   const ul=$("woList"); ul.innerHTML="";
