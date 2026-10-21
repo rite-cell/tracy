@@ -7,6 +7,9 @@
 <meta name="apple-mobile-web-app-title" content="Tracy">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#F5F1FF">
+<script>
+try{ var t=localStorage.getItem("tracy-theme"); if(t==="light"||t==="dark") document.documentElement.setAttribute("data-theme",t); }catch(e){}
+</script>
 <meta name="description" content="Tracy, min träningslogg.">
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -23,6 +26,10 @@
   --bg:#F5F1FF; --surface:#FFFFFF; --ink:#22164F; --muted:#6B6292;
   --grape:#5B34E0; --pink:#FF4F9A; --lime:#C4F03A; --sky:#4DC3FF; --sun:#FFC433;
   --line:#E3DCFA; --onGrape:#FFFFFF; --onLime:#22164F;
+  --sticker:#5B34E0;
+  --shadow:0 1px 2px rgba(34,22,79,.06), 0 8px 22px rgba(91,52,224,.10);
+  --glow-pink:none; --glow-lime:none; --glow-sky:none; --glow-sun:none;
+  --glow-grape:0 14px 34px rgba(91,52,224,.28);
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
@@ -30,17 +37,40 @@
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
     color-scheme: dark;
-    --bg:#170F33; --surface:#231A4A; --ink:#F3EEFF; --muted:#A79FCC;
-    --grape:#8B6BFF; --line:#3A2F6B; --onGrape:#FFFFFF;
+    --bg:#120B2B; --surface:#2A2058; --ink:#F5F1FF; --muted:#B3AAD9;
+    --grape:#7B5CFF; --line:#3D3270; --onGrape:#FFFFFF;
+    --sticker:#5B34E0;
+    --shadow:0 10px 28px rgba(0,0,0,.35);
+    --glow-pink:0 0 22px rgba(255,79,154,.45); --glow-lime:0 0 20px rgba(196,240,58,.35);
+    --glow-sky:0 0 20px rgba(77,195,255,.35); --glow-sun:0 0 20px rgba(255,196,51,.35);
+    --glow-grape:0 12px 40px rgba(91,52,224,.55);
   }
 }
 :root[data-theme="dark"]{
-  color-scheme: dark;
-  --bg:#170F33; --surface:#231A4A; --ink:#F3EEFF; --muted:#A79FCC;
-  --grape:#8B6BFF; --line:#3A2F6B; --onGrape:#FFFFFF;
+    color-scheme: dark;
+    --bg:#120B2B; --surface:#2A2058; --ink:#F5F1FF; --muted:#B3AAD9;
+    --grape:#7B5CFF; --line:#3D3270; --onGrape:#FFFFFF;
+    --sticker:#5B34E0;
+    --shadow:0 10px 28px rgba(0,0,0,.35);
+    --glow-pink:0 0 22px rgba(255,79,154,.45); --glow-lime:0 0 20px rgba(196,240,58,.35);
+    --glow-sky:0 0 20px rgba(77,195,255,.35); --glow-sun:0 0 20px rgba(255,196,51,.35);
+    --glow-grape:0 12px 40px rgba(91,52,224,.55);
 }
 *,*::before,*::after{box-sizing:inherit}
 [hidden]{display:none !important}
+.card{box-shadow:var(--shadow)}
+.sticker{background:var(--sticker) !important;box-shadow:var(--glow-grape)}
+.stat:nth-child(1){box-shadow:var(--glow-sky)}
+.stat:nth-child(2){box-shadow:var(--glow-sun)}
+.stat:nth-child(3){box-shadow:var(--glow-lime)}
+.big{box-shadow:var(--glow-pink)}
+.big[style*="--grape"]{box-shadow:var(--glow-grape)}
+.big[style*="--sky"]{box-shadow:var(--glow-sky)}
+.big[style*="--surface"]{box-shadow:none}
+.wo-prog,.set.pr{box-shadow:var(--glow-lime)}
+.chip[aria-pressed="true"]{box-shadow:var(--shadow)}
+nav.tabs{box-shadow:0 -6px 20px rgba(34,22,79,.06)}
+.theme-seg{margin:0}
 .plain{min-width:0;max-width:100%}
 input[type="date"].plain,input[type="time"].plain{-webkit-appearance:none;appearance:none;display:block;width:100%;min-height:48px;font-size:16px;padding:10px 8px;text-align:left}
 input[type="date"]::-webkit-date-and-time-value,input[type="time"]::-webkit-date-and-time-value{text-align:left}
@@ -90,7 +120,7 @@ h2{font-size:24px;font-weight:800;letter-spacing:-0.02em;margin:26px 0 10px}
 .sticker .sub{position:relative;z-index:1;font-size:15px;opacity:.9}
 .sticker button{position:relative;z-index:1;margin-top:12px;background:var(--lime);color:var(--onLime);border:0;border-radius:999px;padding:8px 16px;font-weight:600}
 
-.card{background:var(--surface);border:2px solid var(--line);border-radius:20px;padding:16px}
+.card{background:var(--surface);border:1.5px solid var(--line);border-radius:20px;padding:16px}
 .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 2px 8px;scrollbar-width:none}
 .chips::-webkit-scrollbar{display:none}
 .chip{flex:none;border:2px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 14px;font-weight:600;white-space:nowrap}
@@ -425,6 +455,16 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
       <select id="equipFilter" class="plain" aria-label="Filtrera på redskap" style="margin-top:14px"></select>
       <div id="exList" style="margin-top:12px"></div>
       <details class="arch" id="archBox" hidden><summary>Arkiverade övningar</summary><div id="archList"></div></details>
+    </div>
+
+    <h2>Utseende</h2>
+    <div class="card">
+      <div class="seg theme-seg" id="themeSeg" role="group" aria-label="Utseende">
+        <button type="button" data-t="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-t="light" aria-pressed="false">Ljus</button>
+        <button type="button" data-t="dark" aria-pressed="false">Mörk</button>
+      </div>
+      <p class="hint" style="margin:8px 2px 0">Auto följer telefonens inställning.</p>
     </div>
 
     <h2>Konto och synk</h2>
@@ -1426,6 +1466,20 @@ document.querySelectorAll("#metric button").forEach((b,i)=> b.onclick=()=>{
 });
 $("addSet").onclick=addSet;
 $("newWoBtn").onclick=()=>openWoEditor(null);
+function applyTheme(t){
+  const root=document.documentElement;
+  if(t==="light"||t==="dark") root.setAttribute("data-theme",t); else root.removeAttribute("data-theme");
+  document.querySelectorAll("#themeSeg button").forEach(b=>b.setAttribute("aria-pressed", b.dataset.t===(t||"auto")));
+  const dark = t==="dark" || (t!=="light" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+  const m=document.querySelector('meta[name="theme-color"]'); if(m) m.setAttribute("content", dark?"#120B2B":"#F5F1FF");
+}
+let themePref="auto"; try{ themePref=localStorage.getItem("tracy-theme")||"auto"; }catch(e){}
+applyTheme(themePref);
+document.querySelectorAll("#themeSeg button").forEach(b=> b.onclick=()=>{
+  themePref=b.dataset.t; try{ localStorage.setItem("tracy-theme", themePref); }catch(e){}
+  applyTheme(themePref); renderProg(); renderBw(); renderWeek();
+});
+if(window.matchMedia){ const mq=matchMedia("(prefers-color-scheme: dark)"); const f=()=>{ if(themePref==="auto"){ applyTheme("auto"); renderProg(); renderBw(); renderWeek(); } }; mq.addEventListener ? mq.addEventListener("change",f) : mq.addListener(f); }
 $("equipFilter").onchange=e=>{ equipFilter=e.target.value; renderExBank(); };
 document.querySelectorAll("#newExKind button").forEach(b=> b.onclick=()=>{ newKind=b.dataset.k; document.querySelectorAll("#newExKind button").forEach(x=>x.setAttribute("aria-pressed", x===b)); });
 $("woAddRow").onclick=()=>{ const last=editingWo.items[editingWo.items.length-1]; editingWo.items.push({ex:state.exercises[0],sets:last?last.sets:3,reps:last?last.reps:8}); renderWoRows(); };
