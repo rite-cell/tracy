@@ -207,6 +207,11 @@ input.plain,select.plain{width:100%;border:2px solid var(--line);background:var(
 .exd-stat b{display:block;font-size:20px;font-weight:800;letter-spacing:-0.02em}
 .exd-stat span{font-size:13px;color:var(--muted)}
 details.arch summary{cursor:pointer;color:var(--muted);font-weight:600;padding:6px 2px}
+.exfocus{background:var(--bg);border-radius:16px;padding:12px 14px;margin-bottom:12px}
+.exfocus small{display:block;font-size:13px;color:var(--muted)}
+.exfocus b{display:block;font-size:26px;font-weight:800;letter-spacing:-0.02em;line-height:1.15;margin:2px 0 6px}
+.exfocus .tgt{display:inline-block;background:var(--lime);color:var(--onLime);border-radius:999px;padding:3px 12px;font-weight:800;font-size:14px}
+.linkbtn{border:0;background:transparent;color:var(--grape);font-weight:600;padding:8px 0 0;text-decoration:underline;text-underline-offset:3px}
 .acct-msg{font-size:14px;margin:8px 2px 0;min-height:1em}
 .acct-msg.err{color:var(--pink)}
 .small-btn{border:2px solid var(--line);background:var(--surface);border-radius:12px;padding:8px 12px;font-weight:600}
@@ -300,7 +305,16 @@ nav.tabs button[aria-current="page"]{background:var(--bg);color:var(--ink)}
         <input type="date" id="logDate" class="plain">
       </div>
       <div id="strBox">
+      <div class="exfocus" id="exFocus" hidden>
+        <small id="exFocusCtx"></small>
+        <b id="exFocusName"></b>
+        <span class="tgt" id="exFocusTgt"></span>
+        <div><button type="button" class="linkbtn" id="exFocusSwitch">Logga en annan övning</button></div>
+      </div>
+      <div id="chipsWrap">
       <div class="chips" id="exChips" role="group" aria-label="Välj övning"></div>
+      <button type="button" class="linkbtn" id="backToWo" hidden style="padding:0 0 8px">Tillbaka till passet</button>
+      </div>
       <p class="hint" id="lastHint"></p>
       <div class="row" id="repsRow">
         <div class="field">
@@ -809,9 +823,14 @@ function renderExChips(){
   const add=document.createElement("button"); add.type="button"; add.className="chip add"; add.textContent="+ Ny övning";
   add.onclick=()=>{ go("v-plan"); setTimeout(()=>$("newEx").focus(),50); };
   box.appendChild(add);
+  requestAnimationFrame(()=>{
+    const sel=box.querySelector('[aria-pressed="true"]'); if(!sel || box.hidden) return;
+    const target=sel.offsetLeft - (box.clientWidth - sel.offsetWidth)/2;
+    box.scrollTo ? box.scrollTo({left:Math.max(0,target), behavior:"smooth"}) : (box.scrollLeft=Math.max(0,target));
+  });
 }
 function prefill(){
-  updateLogFields();
+  updateLogFields(); updateFocus();
   const hint=$("lastHint");
   if(kindOf(currentEx)==="time"){
     const tl=state.sets.filter(s=>s.ex===currentEx && isTimeSet(s));
@@ -899,7 +918,21 @@ function addSet(){
 }
 
 /* ---------- saved workouts ---------- */
-let editingWo = null;
+let editingWo = null, freeLog = false;
+function updateFocus(){
+  const w=state.activeWorkout;
+  const idx = w ? w.items.findIndex(it=>it.ex===currentEx) : -1;
+  const focus = !!w && idx>=0 && !freeLog;
+  $("exFocus").hidden=!focus; $("exChips").hidden=focus;
+  $("backToWo").hidden = !(w && freeLog);
+  if(focus){
+    const it=w.items[idx], d=woDone(it);
+    $("exFocusCtx").textContent=w.name+", övning "+(idx+1)+" av "+w.items.length;
+    $("exFocusName").textContent=it.ex;
+    $("exFocusTgt").textContent = kindOf(it.ex)==="time" ? it.reps+" min" : "Set "+Math.min(d+1,it.sets)+" av "+it.sets+", "+it.reps+" reps";
+    if(d>=it.sets) $("exFocusTgt").textContent="Klar: "+it.sets+" av "+it.sets+" set";
+  }
+}
 function woDone(it){
   const w=state.activeWorkout; if(!w) return 0;
   return state.sets.filter(s=>s.date===w.date && s.ex===it.ex).length;
@@ -909,7 +942,7 @@ function woNextOpen(){
   return w.items.find(it=>woDone(it)<it.sets) || null;
 }
 function selectWoItem(it, scroll){
-  currentEx=it.ex;
+  currentEx=it.ex; freeLog=false;
   setMode("str"); renderExChips(); prefill();
   if(kindOf(it.ex)==="time") $("tmin").value=it.reps; else $("reps").value=it.reps;
   renderWorkout();
@@ -936,9 +969,10 @@ function finishWorkout(){
   const w=state.activeWorkout; if(!w) return;
   const left=w.items.filter(it=>woDone(it)<it.sets).length;
   if(left && !confirm("Avsluta "+w.name+"? "+left+" övning"+(left>1?"ar":"")+" är inte klar"+(left>1?"a":"")+".")) return;
-  state.activeWorkout=null; save(); renderWorkout(); toast("Passet sparat. Bra jobbat!");
+  state.activeWorkout=null; freeLog=false; save(); renderWorkout(); toast("Passet sparat. Bra jobbat!");
 }
 function renderWorkout(){
+  updateFocus();
   const box=$("wo"); box.innerHTML="";
   const w=state.activeWorkout;
   if(!w){
@@ -1466,6 +1500,8 @@ document.querySelectorAll("#metric button").forEach((b,i)=> b.onclick=()=>{
 });
 $("addSet").onclick=addSet;
 $("newWoBtn").onclick=()=>openWoEditor(null);
+$("exFocusSwitch").onclick=()=>{ freeLog=true; updateFocus(); renderWorkout(); };
+$("backToWo").onclick=()=>{ const w=state.activeWorkout; if(!w) return; const it=woNextOpen()||w.items[0]; selectWoItem(it,false); };
 function applyTheme(t){
   const root=document.documentElement;
   if(t==="light"||t==="dark") root.setAttribute("data-theme",t); else root.removeAttribute("data-theme");
